@@ -3,7 +3,7 @@ package com.bnpp.pf.walle.access.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
-import org.springframework.web.reactive.function.client.*;
+import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.UUID;
@@ -26,14 +26,14 @@ class AdminClientTest {
     @Mock
     private WebClient.ResponseSpec responseSpecMock;
 
-    @InjectMocks
-    private AdminClient adminClient = new AdminClient();
+    private AdminClient adminClient;
 
     private UUID testId;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+        adminClient = new AdminClient(webClient);
         testId = UUID.randomUUID();
     }
 
@@ -41,27 +41,25 @@ class AdminClientTest {
     void getCallbackUrlWithCaseId_ShouldReturnValue() {
         String expectedResponse = "callback-url";
 
-        // Mock WebClient behavior chain
+        // ✅ Chaîne de mocks corrigée avec casts explicites
         when(webClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) uriSpecMock);
-        when(uriSpecMock.uri(anyString(), any(UUID.class))).thenReturn((WebClient.RequestHeadersSpec) headersSpecMock);
+        when(uriSpecMock.uri(anyString(), any(UUID.class)))
+                .thenReturn((WebClient.RequestHeadersSpec) headersSpecMock);
         when(headersSpecMock.retrieve()).thenReturn(responseSpecMock);
         when(responseSpecMock.bodyToMono(String.class)).thenReturn(Mono.just(expectedResponse));
 
-        // Create AdminClient using the mocked WebClient
-        AdminClient tested = new AdminClient(webClient);
+        String result = adminClient.getCallbackUrlWithCaseId(testId);
 
-        String result = tested.getCallbackUrlWithCaseId(testId);
         assertEquals(expectedResponse, result);
-
-        verify(webClient, times(1)).get();
-        verify(uriSpecMock, times(1)).uri(anyString(), any(UUID.class));
-        verify(headersSpecMock, times(1)).retrieve();
+        verify(webClient).get();
+        verify(uriSpecMock).uri(anyString(), any(UUID.class));
+        verify(headersSpecMock).retrieve();
     }
 
     @Test
     void getCallbackUrlWithConfigId_ShouldThrow_WhenErrorOccurs() {
         when(webClient.get()).thenThrow(new RuntimeException("Network failure"));
-        AdminClient tested = new AdminClient(webClient);
-        assertThrows(RuntimeException.class, () -> tested.getCallbackUrlWithConfigId(testId));
+
+        assertThrows(RuntimeException.class, () -> adminClient.getCallbackUrlWithConfigId(testId));
     }
 }
