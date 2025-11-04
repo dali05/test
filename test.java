@@ -1,29 +1,41 @@
+WebClient webClient = WebClient.create("http://localhost:8081/api/configs");
 
-<dependencies>
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-web</artifactId>
-    </dependency>
+public ConfigResponse getConfigById(UUID id) {
+    return webClient.get()
+        .uri("/{id}", id)
+        .retrieve()
+        .bodyToMono(ConfigResponse.class)
+        .block();
+}
 
-    <dependency>
-        <groupId>org.springframework.cloud</groupId>
-        <artifactId>spring-cloud-starter-openfeign</artifactId>
-    </dependency>
+@Service
+public class ConfigService {
+    private final WebClient webClient = WebClient.builder()
+        .baseUrl("http://localhost:8081/api/configs")
+        .build();
 
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-actuator</artifactId>
-    </dependency>
-</dependencies>
+    public ConfigResponse getConfigById(UUID id) {
+        return webClient.get()
+            .uri("/{id}", id)
+            .retrieve()
+            .bodyToMono(ConfigResponse.class)
+            .block(); // ou asynchrone selon ton besoin
+    }
+}
 
-<dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-dependencies</artifactId>
-            <version>2023.0.3</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
+
+@Service
+public class ConfigService {
+
+    private final WebClient webClient = WebClient.builder()
+        .baseUrl("http://localhost:8081/api/configs")
+        .build();
+
+    public ConfigResponse getConfigById(UUID id) {
+        return webClient.get()
+            .uri("/{id}", id)
+            .retrieve()
+            .bodyToMono(ConfigResponse.class)
+            .block(); // pour usage impératif
+    }
+}
