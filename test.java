@@ -15,71 +15,78 @@ class AdminClientTest {
 
     private AdminClient adminClient;
     private WebClient mockWebClient;
-    private WebClient.RequestHeadersUriSpec<?> mockRequestUri;
-    private WebClient.RequestHeadersSpec<?> mockRequestHeaders;
-    private WebClient.ResponseSpec mockResponse;
+    private WebClient.RequestHeadersUriSpec<?> mockRequestUriSpec;
+    private WebClient.RequestHeadersSpec<?> mockRequestHeadersSpec;
+    private WebClient.ResponseSpec mockResponseSpec;
 
     @BeforeEach
     void setUp() throws Exception {
         mockWebClient = mock(WebClient.class);
-        mockRequestUri = mock(WebClient.RequestHeadersUriSpec.class);
-        mockRequestHeaders = mock(WebClient.RequestHeadersSpec.class);
-        mockResponse = mock(WebClient.ResponseSpec.class);
+        mockRequestUriSpec = mock(WebClient.RequestHeadersUriSpec.class);
+        mockRequestHeadersSpec = mock(WebClient.RequestHeadersSpec.class);
+        mockResponseSpec = mock(WebClient.ResponseSpec.class);
 
         adminClient = new AdminClient();
 
-        // Injection du WebClient mocké
+        // injection du mock dans le champ private final via réflexion
         var field = AdminClient.class.getDeclaredField("webClient");
         field.setAccessible(true);
         field.set(adminClient, mockWebClient);
     }
 
-    /** ✅ Cas succès : getCallbackUrlWithCaseId() */
+    /** ✅ Cas succès : /case/{id} */
     @Test
     void testGetCallbackUrlWithCaseId_Success() {
         UUID id = UUID.randomUUID();
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
-        when(mockRequestUri.uri("/case/{id}", id)).thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeaders);
-        when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
-        when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just("http://callback/case"));
+        when(mockWebClient.get()).thenReturn(mockRequestUriSpec);
+        when(mockRequestUriSpec.uri(eq("/case/{id}"), eq(id)))
+                .thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeadersSpec);
+        when(mockRequestHeadersSpec.retrieve()).thenReturn(mockResponseSpec);
+        when(mockResponseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.just("http://callback/case"));
 
         String result = adminClient.getCallbackUrlWithCaseId(id);
 
         assertEquals("http://callback/case", result);
         verify(mockWebClient).get();
-        verify(mockRequestUri).uri("/case/{id}", id);
+        verify(mockRequestUriSpec).uri("/case/{id}", id);
     }
 
-    /** ✅ Cas succès : getCallbackUrlWithConfigId() */
+    /** ✅ Cas succès : /config/{id} */
     @Test
     void testGetCallbackUrlWithConfigId_Success() {
         UUID id = UUID.randomUUID();
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
-        when(mockRequestUri.uri("/config/{id}", id)).thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeaders);
-        when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
-        when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just("http://callback/config"));
+        when(mockWebClient.get()).thenReturn(mockRequestUriSpec);
+        when(mockRequestUriSpec.uri(eq("/config/{id}"), eq(id)))
+                .thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeadersSpec);
+        when(mockRequestHeadersSpec.retrieve()).thenReturn(mockResponseSpec);
+        when(mockResponseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.just("http://callback/config"));
 
         String result = adminClient.getCallbackUrlWithConfigId(id);
 
         assertEquals("http://callback/config", result);
         verify(mockWebClient).get();
-        verify(mockRequestUri).uri("/config/{id}", id);
+        verify(mockRequestUriSpec).uri("/config/{id}", id);
     }
 
-    /** ❌ Cas erreur : WebClientResponseException */
+    /** ❌ Cas erreur HTTP */
     @Test
     void testFetchCallbackUrl_WebClientResponseException() {
         UUID id = UUID.randomUUID();
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
-        when(mockRequestUri.uri("/case/{id}", id)).thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeaders);
-        when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
-        when(mockResponse.bodyToMono(String.class))
+        when(mockWebClient.get()).thenReturn(mockRequestUriSpec);
+        when(mockRequestUriSpec.uri(eq("/case/{id}"), eq(id)))
+                .thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeadersSpec);
+        when(mockRequestHeadersSpec.retrieve()).thenReturn(mockResponseSpec);
+        when(mockResponseSpec.bodyToMono(String.class))
                 .thenThrow(WebClientResponseException.create(404, "Not Found", null, null, null));
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> adminClient.getCallbackUrlWithCaseId(id));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> adminClient.getCallbackUrlWithCaseId(id));
+
         assertTrue(ex.getMessage().contains("Error fetching callback URL"));
     }
 
@@ -88,11 +95,15 @@ class AdminClientTest {
     void testFetchCallbackUrl_GenericException() {
         UUID id = UUID.randomUUID();
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
-        when(mockRequestUri.uri("/config/{id}", id)).thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeaders);
-        when(mockRequestHeaders.retrieve()).thenThrow(new RuntimeException("Unexpected error"));
+        when(mockWebClient.get()).thenReturn(mockRequestUriSpec);
+        when(mockRequestUriSpec.uri(eq("/config/{id}"), eq(id)))
+                .thenReturn((WebClient.RequestHeadersSpec<?>) mockRequestHeadersSpec);
+        when(mockRequestHeadersSpec.retrieve())
+                .thenThrow(new RuntimeException("Connection refused"));
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> adminClient.getCallbackUrlWithConfigId(id));
+        RuntimeException ex = assertThrows(RuntimeException.class,
+                () -> adminClient.getCallbackUrlWithConfigId(id));
+
         assertTrue(ex.getMessage().contains("Unexpected error fetching callback URL"));
     }
 }
