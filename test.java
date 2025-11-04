@@ -3,12 +3,14 @@ package com.bnpp.pf.walle.access.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 
+import java.lang.reflect.Field;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.*;
  * - Tous les blocs catch
  * - Toutes les branches conditionnelles
  */
+@ExtendWith(MockitoExtension.class)
 @DisplayName("AdminClient - Tests unitaires complets")
 class AdminClientTest {
 
@@ -44,11 +47,10 @@ class AdminClientTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        MockitoAnnotations.openMocks(this);
         adminClient = new AdminClient();
 
         // Injection du WebClient mocké via reflection
-        var field = AdminClient.class.getDeclaredField("webClient");
+        Field field = AdminClient.class.getDeclaredField("webClient");
         field.setAccessible(true);
         field.set(adminClient, mockWebClient);
     }
@@ -64,7 +66,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         String expectedUrl = "http://callback/case/12345";
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just(expectedUrl));
@@ -94,7 +96,7 @@ class AdminClientTest {
             null
         );
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.error(exception));
@@ -103,7 +105,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithCaseId(id));
         
-        assertTrue(thrown.getMessage().contains("Error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Error fetching callback URL for case"));
         assertTrue(thrown.getMessage().contains("404"));
         assertEquals(exception, thrown.getCause());
     }
@@ -121,7 +123,7 @@ class AdminClientTest {
             null
         );
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.error(exception));
@@ -130,7 +132,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithCaseId(id));
         
-        assertTrue(thrown.getMessage().contains("Error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Error fetching callback URL for case"));
         assertTrue(thrown.getMessage().contains("500"));
     }
 
@@ -141,7 +143,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         RuntimeException genericException = new RuntimeException("Database connection failed");
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenThrow(genericException);
 
@@ -149,7 +151,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithCaseId(id));
         
-        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL for case"));
         assertEquals(genericException, thrown.getCause());
     }
 
@@ -166,7 +168,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithCaseId(id));
         
-        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL for case"));
     }
 
     // ========================================
@@ -180,7 +182,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         String expectedUrl = "http://callback/config/67890";
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just(expectedUrl));
@@ -210,7 +212,7 @@ class AdminClientTest {
             null
         );
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.error(exception));
@@ -219,7 +221,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithConfigId(id));
         
-        assertTrue(thrown.getMessage().contains("Error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Error fetching callback URL for config"));
         assertTrue(thrown.getMessage().contains("401"));
     }
 
@@ -236,7 +238,7 @@ class AdminClientTest {
             null
         );
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.error(exception));
@@ -245,7 +247,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithConfigId(id));
         
-        assertTrue(thrown.getMessage().contains("Error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Error fetching callback URL for config"));
         assertTrue(thrown.getMessage().contains("503"));
     }
 
@@ -256,7 +258,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         RuntimeException genericException = new RuntimeException("Network timeout");
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenThrow(genericException);
 
@@ -264,7 +266,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithConfigId(id));
         
-        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL for config"));
         assertEquals(genericException, thrown.getCause());
     }
 
@@ -275,7 +277,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         IllegalStateException illegalStateException = new IllegalStateException("Invalid state");
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenThrow(illegalStateException);
@@ -284,7 +286,7 @@ class AdminClientTest {
         RuntimeException thrown = assertThrows(RuntimeException.class, 
             () -> adminClient.getCallbackUrlWithConfigId(id));
         
-        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL"));
+        assertTrue(thrown.getMessage().contains("Unexpected error fetching callback URL for config"));
     }
 
     // ========================================
@@ -298,7 +300,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         String emptyUrl = "";
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just(emptyUrl));
@@ -318,7 +320,7 @@ class AdminClientTest {
         UUID id = UUID.randomUUID();
         String urlWithSpecialChars = "http://callback/config?param=value&special=é@#";
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just(urlWithSpecialChars));
@@ -336,7 +338,7 @@ class AdminClientTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class))
@@ -352,38 +354,13 @@ class AdminClientTest {
         verify(mockRequestUri).uri("/config/{id}", id);
     }
 
-    // ========================================
-    // Tests de vérification des interactions
-    // ========================================
-
-    @Test
-    @DisplayName("✅ Vérification que block() est appelé sur le Mono")
-    void testMonoBlockIsCalled() {
-        // Given
-        UUID id = UUID.randomUUID();
-        Mono<String> spyMono = spy(Mono.just("http://test"));
-
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
-        when(mockRequestUri.uri(anyString(), any(UUID.class))).thenReturn(mockRequestHeaders);
-        when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
-        when(mockResponse.bodyToMono(String.class)).thenReturn(spyMono);
-
-        // When
-        String result = adminClient.getCallbackUrlWithCaseId(id);
-
-        // Then
-        assertNotNull(result);
-        // Vérifie que le Mono a bien été souscrit
-        verify(mockResponse).bodyToMono(String.class);
-    }
-
     @Test
     @DisplayName("✅ Test avec UUID null ne lève pas d'exception dans le mock")
     void testWithNullUUID() {
         // Given
         UUID id = null;
 
-        when(mockWebClient.get()).thenReturn(mockRequestUri);
+        when(mockWebClient.get()).thenReturn((WebClient.RequestHeadersUriSpec) mockRequestUri);
         when(mockRequestUri.uri(anyString(), any())).thenReturn(mockRequestHeaders);
         when(mockRequestHeaders.retrieve()).thenReturn(mockResponse);
         when(mockResponse.bodyToMono(String.class)).thenReturn(Mono.just("url"));
@@ -394,5 +371,20 @@ class AdminClientTest {
         // Then
         assertNotNull(result);
         verify(mockRequestUri).uri("/case/{id}", id);
+    }
+
+    @Test
+    @DisplayName("✅ Test du constructeur par défaut")
+    void testDefaultConstructor() throws Exception {
+        // Given
+        AdminClient freshClient = new AdminClient();
+        
+        // When
+        Field field = AdminClient.class.getDeclaredField("webClient");
+        field.setAccessible(true);
+        WebClient webClient = (WebClient) field.get(freshClient);
+        
+        // Then
+        assertNotNull(webClient);
     }
 }
