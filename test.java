@@ -1,203 +1,197 @@
-package com.bnpp.pf.walle.access.app.notification;
+—– FILE: notification/app/port/in/SendNotificationUseCase.java
+package com.bnpp.pf.walle.access.notification.app.port.in;
 
-import com.bnpp.pf.walle.access.app.notification.model.NotificationRequestDto;
+import com.bnpp.pf.walle.access.notification.app.model.NotificationRequestDto;
 
-public interface NotificationService {
-    void sendNotification(NotificationRequestDto notif);
+/**
+	•	Port IN – defines the use case contract for sending a notification.
+*/
+public interface SendNotificationUseCase {
+void sendNotification(NotificationRequestDto notif);
 }
 
+—– FILE: notification/app/port/out/AccessRequestRepositoryPort.java
+package com.bnpp.pf.walle.access.notification.app.port.out;
 
-package com.bnpp.pf.walle.access.app.notification.model;
+import com.bnpp.pf.walle.access.notification.app.model.CaseConfigId;
+
+import java.util.Optional;
+import java.util.UUID;
+
+/**
+	•	Port OUT – defines the contract to retrieve case/config information.
+*/
+public interface AccessRequestRepositoryPort {
+Optional findCaseIdAndConfigIdById(UUID requestId);
+}
+
+—– FILE: notification/app/port/out/AdminClientPort.java
+package com.bnpp.pf.walle.access.notification.app.port.out;
 
 import java.util.UUID;
 
+/**
+	•	Port OUT – defines the contract to retrieve callback URL from Admin API.
+*/
+public interface AdminClientPort {
+String getCallbackUrlWithCaseId(UUID caseId);
+}
+
+—– FILE: notification/app/port/out/ApigeeNotifierPort.java
+package com.bnpp.pf.walle.access.notification.app.port.out;
+
+import com.bnpp.pf.walle.access.notification.app.model.NotificationRequestDto;
+
+/**
+	•	Port OUT – defines the contract for sending notifications to Apigee.
+*/
+public interface ApigeeNotifierPort {
+void notifyApigee(NotificationRequestDto notif, String apigeeUrl);
+}
+
+—– FILE: notification/app/service/SendNotificationService.java
+package com.bnpp.pf.walle.access.notification.app.service;
+
+import com.bnpp.pf.walle.access.notification.app.model.CaseConfigId;
+import com.bnpp.pf.walle.access.notification.app.model.NotificationRequestDto;
+import com.bnpp.pf.walle.access.notification.app.port.in.SendNotificationUseCase;
+import com.bnpp.pf.walle.access.notification.app.port.out.AccessRequestRepositoryPort;
+import com.bnpp.pf.walle.access.notification.app.port.out.AdminClientPort;
+import com.bnpp.pf.walle.access.notification.app.port.out.ApigeeNotifierPort;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.util.Optional;
+
+/**
+	•	Application Service – implements business logic for sending notifications.
+*/
+public class SendNotificationService implements SendNotificationUseCase {
+private final AccessRequestRepositoryPort repositoryPort;
+private final AdminClientPort adminClientPort;
+private final ApigeeNotifierPort apigeeNotifierPort;
+public SendNotificationService(AccessRequestRepositoryPort repositoryPort,
+AdminClientPort adminClientPort,
+ApigeeNotifierPort apigeeNotifierPort) {
+this.repositoryPort = repositoryPort;
+this.adminClientPort = adminClientPort;
+this.apigeeNotifierPort = apigeeNotifierPort;
+}
+@Override
+public void sendNotification(NotificationRequestDto notif) {
+findCaseIdAndConfigIdById(notif.getRequestId())
+.map(this::extractApigeeUrl)
+.ifPresentOrElse(
+apigeeUrl -> apigeeNotifierPort.notifyApigee(notif, apigeeUrl),
+() -> System.out.printf(“No case/config found for request ID: %s%n”, notif.getRequestId())
+);
+}
+private Optional findCaseIdAndConfigIdById(java.util.UUID requestId) {
+return repositoryPort.findCaseIdAndConfigIdById(requestId);
+}
+private String extractApigeeUrl(CaseConfigId caseConfig) {
+try {
+String adminResponse = adminClientPort.getCallbackUrlWithCaseId(caseConfig.caseId());
+JsonNode node = new ObjectMapper().readTree(adminResponse);
+return node.path(“data”).asText(null);
+} catch (Exception e) {
+throw new RuntimeException(“Unable to extract Apigee URL”, e);
+}
+}
+}
+
+—– FILE: notification/app/model/CaseConfigId.java
+package com.bnpp.pf.walle.access.notification.app.model;
+
+import java.util.UUID;
+
+/**
+	•	Domain model – represents the link between case and configuration.
+*/
 public record CaseConfigId(UUID caseId, UUID configId) {}
 
-package com.bnpp.pf.walle.access.app.notification.port.out;
-
-import com.bnpp.pf.walle.access.app.notification.model.CaseConfigId;
-
-import java.util.Optional;
-import java.util.UUID;
-
-public interface AccessRequestRepositoryPort {
-    Optional<CaseConfigId> findCaseIdAndConfigIdById(UUID requestId);
-}
-
-
-package com.bnpp.pf.walle.access.app.notification.port.out;
+—– FILE: notification/app/model/NotificationRequestDto.java
+package com.bnpp.pf.walle.access.notification.app.model;
 
 import java.util.UUID;
 
-public interface AdminClientPort {
-    String getCallbackUrl(UUID caseId);
-}
+/**
+	•	Domain model – represents the incoming notification payload.
+*/
+public record NotificationRequestDto(UUID requestId, String payload) {}
 
+—– FILE: notification/adapter/out/AccessRequestRepositoryAdapter.java
+package com.bnpp.pf.walle.access.notification.adapter.out;
 
-package com.bnpp.pf.walle.access.app.notification.port.out;
-
-import com.bnpp.pf.walle.access.app.notification.model.NotificationRequestDto;
-
-public interface ApigeeNotifierPort {
-    void sendToApigee(NotificationRequestDto notif, String apigeeUrl);
-}
-
-package com.bnpp.pf.walle.access.app.notification;
-
-import com.bnpp.pf.walle.access.app.notification.model.CaseConfigId;
-import com.bnpp.pf.walle.access.app.notification.model.NotificationRequestDto;
-import com.bnpp.pf.walle.access.app.notification.port.out.AccessRequestRepositoryPort;
-import com.bnpp.pf.walle.access.app.notification.port.out.AdminClientPort;
-import com.bnpp.pf.walle.access.app.notification.port.out.ApigeeNotifierPort;
-
-import java.util.Optional;
-
-public class NotificationServiceImpl implements NotificationService {
-
-    private final AccessRequestRepositoryPort requestRepository;
-    private final AdminClientPort adminClient;
-    private final ApigeeNotifierPort apigeeNotifier;
-
-    public NotificationServiceImpl(AccessRequestRepositoryPort requestRepository,
-                                   AdminClientPort adminClient,
-                                   ApigeeNotifierPort apigeeNotifier) {
-        this.requestRepository = requestRepository;
-        this.adminClient = adminClient;
-        this.apigeeNotifier = apigeeNotifier;
-    }
-
-    @Override
-    public void sendNotification(NotificationRequestDto notif) {
-        Optional<CaseConfigId> configOpt = requestRepository.findCaseIdAndConfigIdById(notif.getRequestId());
-
-        if (configOpt.isEmpty()) {
-            System.out.printf("No case/config found for request ID: %s%n", notif.getRequestId());
-            return;
-        }
-
-        CaseConfigId config = configOpt.get();
-        String apigeeUrl = adminClient.getCallbackUrl(config.caseId());
-        apigeeNotifier.sendToApigee(notif, apigeeUrl);
-    }
-}
-
-
-package com.bnpp.pf.walle.access.adapter.out;
-
-import com.bnpp.pf.walle.access.app.notification.model.CaseConfigId;
-import com.bnpp.pf.walle.access.app.notification.port.out.AccessRequestRepositoryPort;
-import lombok.RequiredArgsConstructor;
+import com.bnpp.pf.walle.access.notification.app.model.CaseConfigId;
+import com.bnpp.pf.walle.access.notification.app.port.out.AccessRequestRepositoryPort;
 import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 import java.util.UUID;
 
+/**
+	•	Adapter OUT – implements repository access via JPA or another persistence technology.
+*/
 @Repository
-@RequiredArgsConstructor
 public class AccessRequestRepositoryAdapter implements AccessRequestRepositoryPort {
-
-    private final AccessRequestRepository jpaRepository;
-
-    @Override
-    public Optional<CaseConfigId> findCaseIdAndConfigIdById(UUID requestId) {
-        return jpaRepository.findCaseIdAndConfigIdById(requestId);
-    }
+private final AccessRequestRepository delegate;
+public AccessRequestRepositoryAdapter(AccessRequestRepository delegate) {
+this.delegate = delegate;
+}
+@Override
+public Optional findCaseIdAndConfigIdById(UUID requestId) {
+return delegate.findCaseIdAndConfigIdById(requestId);
+}
 }
 
+—– FILE: notification/adapter/out/AdminClientAdapter.java
+package com.bnpp.pf.walle.access.notification.adapter.out;
 
-package com.bnpp.pf.walle.access.adapter.out;
-
-import com.bnpp.pf.walle.access.app.notification.port.out.AdminClientPort;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
+import com.bnpp.pf.walle.access.notification.app.port.out.AdminClientPort;
 import org.springframework.stereotype.Component;
 
+import java.util.UUID;
+
+/**
+	•	Adapter OUT – implements the call to the Admin API.
+*/
 @Component
-@RequiredArgsConstructor
 public class AdminClientAdapter implements AdminClientPort {
-
-    private final AdminClient adminClient;
-    private final ObjectMapper objectMapper;
-
-    @Override
-    public String getCallbackUrl(UUID caseId) {
-        try {
-            String response = adminClient.getCallbackUrlWithCaseId(caseId);
-            JsonNode node = objectMapper.readTree(response);
-            return node.path("data").asText(null);
-        } catch (Exception e) {
-            throw new RuntimeException("Unable to extract Apigee URL", e);
-        }
-    }
+private final AdminClient delegate;
+public AdminClientAdapter(AdminClient delegate) {
+this.delegate = delegate;
+}
+@Override
+public String getCallbackUrlWithCaseId(UUID caseId) {
+return delegate.getCallbackUrlWithCaseId(caseId);
+}
 }
 
-package com.bnpp.pf.walle.access.adapter.out;
+—– FILE: notification/adapter/out/ApigeeNotifierAdapter.java
+package com.bnpp.pf.walle.access.notification.adapter.out;
 
-import com.bnpp.pf.walle.access.app.notification.model.NotificationRequestDto;
-import com.bnpp.pf.walle.access.app.notification.port.out.ApigeeNotifierPort;
-import lombok.RequiredArgsConstructor;
+import com.bnpp.pf.walle.access.notification.app.model.NotificationRequestDto;
+import com.bnpp.pf.walle.access.notification.app.port.out.ApigeeNotifierPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+/**
+	•	Adapter OUT – performs the real HTTP call to Apigee.
+*/
 @Slf4j
-@Service
-@RequiredArgsConstructor
+@Component
 public class ApigeeNotifierAdapter implements ApigeeNotifierPort {
-
-    private final RestTemplate restTemplate;
-
-    @Override
-    public void sendToApigee(NotificationRequestDto notif, String apigeeUrl) {
-        if (apigeeUrl == null || apigeeUrl.isBlank()) {
-            log.warn("Apigee URL is missing, skipping notification for request ID: {}", notif.getRequestId());
-            return;
-        }
-
-        try {
-            HttpEntity<NotificationRequestDto> entity = new HttpEntity<>(notif);
-            ResponseEntity<String> response = restTemplate.postForEntity(apigeeUrl, entity, String.class);
-
-            if (response.getStatusCode().is2xxSuccessful()) {
-                log.info("Notification sent successfully to {}", apigeeUrl);
-            } else {
-                log.warn("Notification failed: {} - {}", response.getStatusCode(), response.getBody());
-            }
-        } catch (Exception e) {
-            log.error("Error sending notification to Apigee: {}", e.getMessage(), e);
-        }
-    }
+private final RestTemplate restTemplate;
+public ApigeeNotifierAdapter(RestTemplate restTemplate) {
+this.restTemplate = restTemplate;
 }
-
-
-package com.bnpp.pf.walle.access.config;
-
-import com.bnpp.pf.walle.access.app.notification.NotificationService;
-import com.bnpp.pf.walle.access.app.notification.NotificationServiceImpl;
-import com.bnpp.pf.walle.access.app.notification.port.out.AccessRequestRepositoryPort;
-import com.bnpp.pf.walle.access.app.notification.port.out.AdminClientPort;
-import com.bnpp.pf.walle.access.app.notification.port.out.ApigeeNotifierPort;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class NotificationConfig {
-
-    @Bean
-    public NotificationService notificationService(AccessRequestRepositoryPort repo,
-                                                   AdminClientPort adminClient,
-                                                   ApigeeNotifierPort notifier) {
-        return new NotificationServiceImpl(repo, adminClient, notifier);
-    }
+@Override
+public void notifyApigee(NotificationRequestDto notif, String apigeeUrl) {
+if (apigeeUrl == null || apigeeUrl.isBlank()) {
+log.warn(“Apigee URL is missing, skipping notification for request ID: {}”, notif.requestId());
+return;
 }
-
-
-
-
-
-
-
-
