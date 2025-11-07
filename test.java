@@ -1,3 +1,7 @@
+
+
+verify(mockLogger).error(argThat(msg -> msg.contains("[MASKED]")), any());
+
 package com.bnpp.pf.common.logging;
 
 import org.junit.jupiter.api.BeforeEach;
