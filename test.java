@@ -1,6 +1,21 @@
 package com.bnpp.pf.walle.access.configs;
 
 import lombok.RequiredArgsConstructor;
+import org.apache.hc.client5.http.classic.HttpClient;
+import org.apache.hc.client5.http.classic.HttpClientBuilder;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
+import org.apache.hc.core5.http.io.SocketConfig;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.ssl.SSLContexts;
+import org.apache.hc.core5.ssl.TrustStrategy;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
+import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.core5.util.TimeValue;
+import org.apache.hc.core5.util.Timeout;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -8,17 +23,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+
 import javax.net.ssl.SSLContext;
 import java.security.KeyStore;
-
-import com.bnpp.pf.walle.access.process.adapter.out.apigee.interceptor.JwtRequestInterceptor;
-
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-import org.apache.hc.client5.http.ssl.SSLContexts;
-import org.apache.hc.core5.ssl.SSLContexts;
 
 @Configuration
 @RequiredArgsConstructor
@@ -46,43 +53,47 @@ public class MtlsRestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) throws Exception {
-        // 1️⃣ Charger les keystore et truststore
-        KeyStore keyStore = loadKeyStore(keyStorePath, keyStorePassword, keyStoreType);
-        KeyStore trustStore = loadKeyStore(trustStorePath, trustStorePassword, trustStoreType);
+
+        // 1️⃣ Charger les keystores
+        KeyStore keyStore = KeyStore.getInstance(keyStoreType);
+        try (var ks = keyStorePath.getInputStream()) {
+            keyStore.load(ks, keyStorePassword.toCharArray());
+        }
+
+        KeyStore trustStore = KeyStore.getInstance(trustStoreType);
+        try (var ts = trustStorePath.getInputStream()) {
+            trustStore.load(ts, trustStorePassword.toCharArray());
+        }
 
         // 2️⃣ Construire le contexte SSL
         SSLContext sslContext = SSLContexts.custom()
                 .loadKeyMaterial(keyStore, keyStorePassword.toCharArray())
-                .loadTrustMaterial(trustStore, null)
+                .loadTrustMaterial(trustStore, (TrustStrategy) null)
                 .build();
 
-        // 3️⃣ Construire le socket factory TLS 1.2 / 1.3
-        SSLConnectionSocketFactory sslSocketFactory =
-                new SSLConnectionSocketFactory(sslContext, new String[]{"TLSv1.2", "TLSv1.3"}, null, SSLConnectionSocketFactory.getDefaultHostnameVerifier());
+        // 3️⃣ Configurer la stratégie TLS
+        var tlsStrategy = ClientTlsStrategyBuilder.create()
+                .setSslContext(sslContext)
+                .build();
 
-        // 4️⃣ Construire le HttpClient mTLS
+        // 4️⃣ Créer le connection manager
+        PoolingHttpClientConnectionManager connectionManager =
+                PoolingHttpClientConnectionManagerBuilder.create()
+                        .setTlsStrategy(tlsStrategy)
+                        .build();
+
+        // 5️⃣ Construire le client HTTP
         CloseableHttpClient httpClient = HttpClients.custom()
-                .setConnectionManager(
-                        PoolingHttpClientConnectionManagerBuilder.create()
-                                .setSSLSocketFactory(sslSocketFactory)
-                                .build()
-                )
+                .setConnectionManager(connectionManager)
                 .build();
 
-        // 5️⃣ Lier à Spring RestTemplate
-        HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        // 6️⃣ Adapter pour RestTemplate
+        HttpComponentsClientHttpRequestFactory factory =
+                new HttpComponentsClientHttpRequestFactory(httpClient);
 
         return builder
-                .requestFactory(() -> requestFactory)
+                .requestFactory(() -> factory)
                 .additionalInterceptors(jwtRequestInterceptor)
                 .build();
-    }
-
-    private KeyStore loadKeyStore(Resource resource, String password, String type) throws Exception {
-        KeyStore keyStore = KeyStore.getInstance(type);
-        try (var inputStream = resource.getInputStream()) {
-            keyStore.load(inputStream, password.toCharArray());
-        }
-        return keyStore;
     }
 }
