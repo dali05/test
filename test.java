@@ -2,20 +2,20 @@ package com.bnpp.pf.walle.access.configs;
 
 import lombok.RequiredArgsConstructor;
 import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.classic.HttpClientBuilder;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.HttpsSupport;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
 import org.apache.hc.client5.http.ssl.ClientTlsStrategyBuilder;
-import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.hc.core5.ssl.SSLContexts;
 import org.apache.hc.core5.ssl.TrustStrategy;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
-import org.apache.hc.client5.http.config.ConnectionConfig;
+import org.apache.hc.core5.ssl.SSLInitializationException;
+import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.util.TimeValue;
 import org.apache.hc.core5.util.Timeout;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
@@ -53,8 +53,7 @@ public class MtlsRestTemplateConfig {
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) throws Exception {
-
-        // 1️⃣ Charger les keystores
+        // Charger les KeyStores
         KeyStore keyStore = KeyStore.getInstance(keyStoreType);
         try (var ks = keyStorePath.getInputStream()) {
             keyStore.load(ks, keyStorePassword.toCharArray());
@@ -65,31 +64,31 @@ public class MtlsRestTemplateConfig {
             trustStore.load(ts, trustStorePassword.toCharArray());
         }
 
-        // 2️⃣ Construire le contexte SSL
+        // Construire le contexte SSL
         SSLContext sslContext = SSLContexts.custom()
                 .loadKeyMaterial(keyStore, keyStorePassword.toCharArray())
                 .loadTrustMaterial(trustStore, (TrustStrategy) null)
                 .build();
 
-        // 3️⃣ Configurer la stratégie TLS
-        var tlsStrategy = ClientTlsStrategyBuilder.create()
+        // 👉 Nouvelle API HttpClient 5.2 : SSLConnectionSocketFactoryBuilder
+        var sslSocketFactory = SSLConnectionSocketFactoryBuilder.create()
                 .setSslContext(sslContext)
+                .setHostnameVerifier(HttpsSupport.getDefaultHostnameVerifier()) // sécurité stricte
                 .build();
 
-        // 4️⃣ Créer le connection manager
+        // Connection manager moderne (plus de setTlsStrategy)
         PoolingHttpClientConnectionManager connectionManager =
                 PoolingHttpClientConnectionManagerBuilder.create()
-                        .setTlsStrategy(tlsStrategy)
+                        .setSSLSocketFactory(sslSocketFactory)
                         .build();
 
-        // 5️⃣ Construire le client HTTP
+        // Créer le client HTTP
         CloseableHttpClient httpClient = HttpClients.custom()
                 .setConnectionManager(connectionManager)
                 .build();
 
-        // 6️⃣ Adapter pour RestTemplate
-        HttpComponentsClientHttpRequestFactory factory =
-                new HttpComponentsClientHttpRequestFactory(httpClient);
+        // Adapter vers RestTemplate
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
 
         return builder
                 .requestFactory(() -> factory)
