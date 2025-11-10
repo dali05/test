@@ -69,3 +69,18 @@ public class MtlsRestTemplateConfig {
         return keyStore;
     }
 }
+
+apigee:
+  url: https://api.your-apigee-endpoint.com
+  jwt:
+    secret: mySecretKey123
+    expiration-by-ms: 3600000
+  mtls:
+    keystore:
+      path: classpath:certs/client-keystore.p12
+      password: changeit
+      type: PKCS12
+    truststore:
+      path: classpath:certs/truststore.jks
+      password: changeit
+      type: JKS
