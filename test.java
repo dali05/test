@@ -1,86 +1,29 @@
-package com.bnpp.pf.walle.access.configs;
+<dependencies>
+    <!-- Pour utiliser HttpClient 5 avec RestTemplate -->
+    <dependency>
+        <groupId>org.apache.httpcomponents.client5</groupId>
+        <artifactId>httpclient5</artifactId>
+    </dependency>
 
-import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.web.client.RestTemplateBuilder;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.Resource;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
-import org.springframework.web.client.RestTemplate;
-import javax.net.ssl.SSLContext;
-import java.security.KeyStore;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-import org.apache.hc.client5.http.ssl.SSLContextBuilder;
-import org.apache.hc.core5.ssl.SSLContexts;
+    <!-- Pour le support SSL (TLS/mTLS) -->
+    <dependency>
+        <groupId>org.apache.httpcomponents.core5</groupId>
+        <artifactId>httpcore5</artifactId>
+    </dependency>
 
-@Configuration
-@RequiredArgsConstructor
-public class MtlsRestTemplateConfig {
+    <!-- (Déjà inclus dans Spring Boot Starter Web mais je le rappelle pour clarté) -->
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+</dependencies>
 
-    @Value("${apigee.mtls.keystore.path}")
-    private Resource keyStorePath;
-
-    @Value("${apigee.mtls.keystore.password}")
-    private String keyStorePassword;
-
-    @Value("${apigee.mtls.keystore.type}")
-    private String keyStoreType;
-
-    @Value("${apigee.mtls.truststore.path}")
-    private Resource trustStorePath;
-
-    @Value("${apigee.mtls.truststore.password}")
-    private String trustStorePassword;
-
-    @Value("${apigee.mtls.truststore.type}")
-    private String trustStoreType;
-
-    private final JwtRequestInterceptor jwtRequestInterceptor;
-
-    @Bean
-    public RestTemplate restTemplate(RestTemplateBuilder builder) throws Exception {
-        SSLContext sslContext = SSLContexts.custom()
-                .loadKeyMaterial(loadKeyStore(keyStorePath, keyStorePassword, keyStoreType), keyStorePassword.toCharArray())
-                .loadTrustMaterial(loadKeyStore(trustStorePath, trustStorePassword, trustStoreType), null)
-                .build();
-
-        SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext);
-
-        CloseableHttpClient httpClient = HttpClients.custom()
-                .setSSLSocketFactory(socketFactory)
-                .build();
-
-        HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
-
-        return builder
-                .requestFactory(() -> requestFactory)
-                .additionalInterceptors(jwtRequestInterceptor)
-                .build();
-    }
-
-    private KeyStore loadKeyStore(Resource resource, String password, String type) throws Exception {
-        KeyStore keyStore = KeyStore.getInstance(type);
-        try (var stream = resource.getInputStream()) {
-            keyStore.load(stream, password.toCharArray());
-        }
-        return keyStore;
-    }
-}
-
-apigee:
-  url: https://api.your-apigee-endpoint.com
-  jwt:
-    secret: mySecretKey123
-    expiration-by-ms: 3600000
-  mtls:
-    keystore:
-      path: classpath:certs/client-keystore.p12
-      password: changeit
-      type: PKCS12
-    truststore:
-      path: classpath:certs/truststore.jks
-      password: changeit
-      type: JKS
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.httpcomponents.client5</groupId>
+            <artifactId>httpclient5</artifactId>
+            <version>5.3</version>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
