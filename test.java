@@ -1,21 +1,12 @@
-spring:
-  ssl:
-    bundles:
-      apigee:                    # nom du bundle SSL
-        key:
-          store: classpath:ssl/client-keystore.p12
-          password: changeit
-        trust:
-          store: classpath:ssl/truststore.jks
-          password: changeit
-
-
 package com.bnpp.pf.walle.access.configs;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.ssl.SslBundle;
+import org.springframework.boot.ssl.SslBundles;
 import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 @Configuration
@@ -23,11 +14,21 @@ import org.springframework.web.client.RestTemplate;
 public class RestTemplateConfig {
 
     private final JwtRequestInterceptor jwtRequestInterceptor;
+    private final SslBundles sslBundles; // Injecté automatiquement par Spring
 
     @Bean
     public RestTemplate restTemplate(RestTemplateBuilder builder) {
+        // 1️⃣ Récupérer le bundle SSL "apigee" défini dans le YAML
+        SslBundle apigeeBundle = sslBundles.getBundle("apigee");
+
+        // 2️⃣ Créer une factory HTTP basée sur ce bundle
+        HttpComponentsClientHttpRequestFactory requestFactory =
+                new HttpComponentsClientHttpRequestFactory();
+        requestFactory.setHttpClient(apigeeBundle.createHttpClient());
+
+        // 3️⃣ Construire le RestTemplate
         return builder
-                .setSslBundle("apigee")                 // 🔐 active le mTLS
+                .requestFactory(() -> requestFactory)
                 .additionalInterceptors(jwtRequestInterceptor)
                 .build();
     }
