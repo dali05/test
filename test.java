@@ -1,10 +1,3 @@
-<dependency>
-    <groupId>com.auth0</groupId>
-    <artifactId>java-jwt</artifactId>
-    <version>4.4.0</version>
-</dependency>
-
-
 package com.example.demo.security;
 
 import com.auth0.jwt.JWT;
@@ -23,8 +16,8 @@ import java.io.IOException;
 @Component
 public class JwtFilter extends OncePerRequestFilter {
 
-    // Clé secrète utilisée pour signer et vérifier les tokens (doit être la même que celle utilisée à la création)
-    private static final String SECRET = "MaSuperCleSecrete123!";
+    // ⚙️ Clé secrète pour vérifier le token (à adapter selon ton app)
+    private static final String SECRET_KEY = "monSecret123";
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -34,39 +27,31 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String authHeader = request.getHeader("Authorization");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            System.out.println("⚠️ Aucun token présent.");
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("{\"error\": \"Token manquant\"}");
-            return;
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7); // Supprimer "Bearer "
+
+            try {
+                // Décoder le token sans validation pour afficher les infos
+                DecodedJWT decodedJWT = JWT.decode(token);
+                String algorithm = decodedJWT.getAlgorithm();
+                System.out.println("✅ Algorithme du token : " + algorithm);
+
+                // Valider le token (signature, expiration, etc.)
+                Algorithm alg = Algorithm.HMAC256(SECRET_KEY);
+                JWTVerifier verifier = JWT.require(alg).build();
+                verifier.verify(token);
+
+                System.out.println("✅ Token valide.");
+
+            } catch (Exception e) {
+                System.out.println("❌ Token invalide : " + e.getMessage());
+            }
+
+        } else {
+            System.out.println("⚠️ Aucun token présent dans la requête.");
         }
 
-        String token = authHeader.substring(7); // Supprimer "Bearer "
-
-        try {
-            // Créer l'algorithme avec la clé secrète
-            Algorithm algorithm = Algorithm.HMAC256(SECRET);
-
-            // Créer un vérificateur
-            JWTVerifier verifier = JWT.require(algorithm).build();
-
-            // Vérifier le token (vérifie signature + expiration)
-            DecodedJWT decodedJWT = verifier.verify(token);
-
-            // Si on arrive ici, le token est valide
-            System.out.println("✅ Token valide !");
-            System.out.println("Algorithme : " + decodedJWT.getAlgorithm());
-            System.out.println("Sujet : " + decodedJWT.getSubject());
-            System.out.println("Émetteur : " + decodedJWT.getIssuer());
-
-            // Continuer la requête
-            filterChain.doFilter(request, response);
-
-        } catch (Exception e) {
-            // Signature invalide, token expiré, etc.
-            System.out.println("❌ Token invalide : " + e.getMessage());
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.getWriter().write("{\"error\": \"Token invalide ou expiré\"}");
-        }
+        // 🔁 Toujours laisser passer la requête
+        filterChain.doFilter(request, response);
     }
 }
