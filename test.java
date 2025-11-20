@@ -1,8 +1,6 @@
-String key = Files.readString(Paths.get("src/main/resources/cert/key_pkcs8.pem"))
-        .replace("-----BEGIN PRIVATE KEY-----", "")
-        .replace("-----END PRIVATE KEY-----", "")
-        .replaceAll("\\s+", "");
+kubectl create namespace ingress-nginx --dry-run=client -o yaml | kubectl apply -f -
 
-byte[] keyBytes = Base64.getDecoder().decode(key);
-PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-RSAPrivateKey privateKey = (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(keySpec);
+kubectl delete job -n ingress-nginx --all
+
+helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+  --namespace ingress-nginx
