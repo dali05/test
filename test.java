@@ -55,3 +55,39 @@ public class FetchDataWorker {
         return vars;
     }
 }
+
+
+@Component
+public class ProcessDataWorker {
+
+    @JobWorker(type = "process_data")
+    public void handleProcessData(final ActivatedJob job) {
+
+        Map<String, Object> vars = job.getVariablesAsMap();
+
+        System.out.println("➡️ Worker PROCESS_DATA exécuté");
+        System.out.println("Variables reçues : " + vars);
+    }
+}
+
+
+@RestController
+@RequiredArgsConstructor
+public class TestController {
+
+    private final ZeebeClient zeebe;
+
+    @PostMapping("/start")
+    public String start() {
+        zeebe
+            .newCreateInstanceCommand()
+            .bpmnProcessId("simple_process")
+            .latestVersion()
+            .variables(Map.of("input", "test"))
+            .send()
+            .join();
+
+        return "Process started!";
+    }
+}
+
