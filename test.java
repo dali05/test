@@ -1,14 +1,11 @@
 camunda:
   client:
-    mode: self-managed          # ← ajoute / corrige cette ligne
+    mode: self-managed
     zeebe:
-      request-timeout: 360s
-      base-url: ${ZEEBE_BASE_URL:http://localhost:8080}
-      gateway-url: ${ZEEBE_GATEWAY_URL:localhost:26500}
-      security:
-        plaintext: true         # ← force une connexion non-TLS si dispo dans ta version
+      gateway:
+        address: "localhost:26500"
+        plaintext: true
     operate:
-      base-url: ${OPERATE_BASE_URL:http://localhost:8081}
-      username: demo
-      password: demo
-      auth-enabled: false
+      base-url: "http://localhost:8081"
+      auth:
+        enabled: false
