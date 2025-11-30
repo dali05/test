@@ -1,5 +1,1 @@
-environment:
-  - CAMUNDA_OPERATE_AUTH_ENABLED=true
-  - CAMUNDA_OPERATE_AUTH_TYPE=BASIC
-  - CAMUNDA_OPERATE_BASIC_AUTH_USER=demo
-  - CAMUNDA_OPERATE_BASIC_AUTH_PASSWORD=demo
+https://github.com/Dulatbay/decentra-back/tree/main
