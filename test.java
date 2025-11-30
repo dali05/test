@@ -1,12 +1,12 @@
-camunda:
-  client:
-    mode: simple
+        <!-- Camunda Zeebe -->
+        <dependency>
+            <groupId>io.camunda</groupId>
+            <artifactId>zeebe-client-java</artifactId>
+            <version>${zeebe.version}</version>
+        </dependency>
 
-    zeebe:
-      gateway-address: "localhost:26500"
-      security:
-        plaintext: true   # ⬅️ TRÈS IMPORTANT
-
-    operate:
-      base-url: "http://localhost:8081"
-      auth-enabled: false
+        <dependency>
+            <groupId>io.camunda</groupId>
+            <artifactId>spring-zeebe-starter</artifactId>
+            <version>${zeebe.version}</version>
+        </dependency>
