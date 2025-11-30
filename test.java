@@ -1,7 +1,13 @@
-{
-  "bpmnProcessId": "create_request",
-  "variables": {
-    "client_code": "12345",
-    "request_id": "REQ001"
-  }
+@Autowired
+ZeebeClient zeebe;
+
+public void startProcess() {
+    zeebe.newCreateInstanceCommand()
+        .bpmnProcessId("create_request")   // ton ID BPMN
+        .latestVersion()
+        .variables(Map.of(
+            "client_code", "12345"
+        ))
+        .send()
+        .join();
 }
