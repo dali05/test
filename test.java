@@ -16,7 +16,10 @@
     log.info("Message walletGetRequest4IdOK envoyé pour requestId {}", requestId);
 }
 
-identificationDecision.dmn
+        
+
+
+
 
 <?xml version="1.0" encoding="UTF-8"?>
 <definitions xmlns="https://www.omg.org/spec/DMN/20191111/MODEL/"
@@ -25,35 +28,30 @@ identificationDecision.dmn
              name="EligibilityDecision"
              namespace="http://example.com/eligibility">
 
-  <!-- ===== DECISION PRINCIPALE ===== -->
   <decision id="identificationDecision" name="identificationDecision">
-    <variable id="eligibilityDecisionVar" name="eligibilityDecision" typeRef="feel:object"/>
+    <variable name="eligibilityDecision" typeRef="feel:any"/>
 
-    <decisionTable id="eligibilityTable" hitPolicy="COLLECT">
+    <decisionTable hitPolicy="COLLECT">
 
-      <!-- === INPUTS === -->
-      <input id="input_dataset" label="datasets">
-        <inputExpression id="inputExpr_dataset" typeRef="feel:any">
+      <!-- INPUTS -->
+      <input id="in_datasets" label="datasets">
+        <inputExpression typeRef="feel:any">
           <text>datasets</text>
         </inputExpression>
       </input>
 
-      <input id="input_caseName" label="caseName">
-        <inputExpression id="inputExpr_caseName" typeRef="feel:string">
+      <input id="in_caseName" label="caseName">
+        <inputExpression typeRef="feel:string">
           <text>caseName</text>
         </inputExpression>
       </input>
 
-      <!-- === OUTPUT (1 erreur par règle) === -->
-      <output id="out_error" name="error" typeRef="feel:any"/>
+      <!-- OUTPUT -->
+      <output id="out_error" name="error" typeRef="feel:any" />
 
-      <!-- ====================== -->
-      <!-- ===== RULES LIST ===== -->
-      <!-- ====================== -->
-
-      <!-- RULE 1 : datasets invalid codes -->
-      <rule id="rule_invalid_dataset">
-        <inputEntry><text>not(datasets all item in [100,105,210])</text></inputEntry>
+      <!-- RULE 1 : dataset non valide -->
+      <rule>
+        <inputEntry><text>some d in datasets satisfies not(d in [100,105,210])</text></inputEntry>
         <inputEntry><text>-</text></inputEntry>
         <outputEntry>
           <text>{
@@ -65,8 +63,8 @@ identificationDecision.dmn
         </outputEntry>
       </rule>
 
-      <!-- RULE 2 : caseName obligatoire -->
-      <rule id="rule_caseName_empty">
+      <!-- RULE 2 : caseName vide -->
+      <rule>
         <inputEntry><text>-</text></inputEntry>
         <inputEntry><text>caseName = null or caseName = ""</text></inputEntry>
         <outputEntry>
@@ -78,8 +76,8 @@ identificationDecision.dmn
         </outputEntry>
       </rule>
 
-      <!-- RULE 3 : caseName doit être FRB2C ou SPB2C -->
-      <rule id="rule_caseName_invalid_value">
+      <!-- RULE 3 : caseName incorrect -->
+      <rule>
         <inputEntry><text>-</text></inputEntry>
         <inputEntry><text>not(caseName in ["FRB2C","SPB2C"])</text></inputEntry>
         <outputEntry>
@@ -92,39 +90,14 @@ identificationDecision.dmn
         </outputEntry>
       </rule>
 
-      <!-- RULE 4 : OK si tout est valide -->
-      <rule id="rule_ok">
+      <!-- RULE 4 : OK -->
+      <rule>
         <inputEntry><text>-</text></inputEntry>
         <inputEntry><text>-</text></inputEntry>
         <outputEntry><text>null</text></outputEntry>
       </rule>
 
     </decisionTable>
-  </decision>
-
-  <!-- ======================================== -->
-  <!-- DECISION 2 : Agrégation des erreurs     -->
-  <!-- ======================================== -->
-
-  <decision id="finalEligibility" name="finalEligibility">
-    <variable name="eligibilityDecision" typeRef="feel:object"/>
-
-    <informationRequirement>
-      <requiredDecision href="#identificationDecision"/>
-    </informationRequirement>
-
-    <literalExpression id="expr_aggregate">
-      <text>
-        let 
-            rawErrors = identificationDecision.error,
-            errorList = rawErrors[error != null]
-        in 
-          if count(errorList) = 0 then
-            {"finalDecision": "OK", "errors": []}
-          else
-            {"finalDecision": "KO", "errors": errorList}
-      </text>
-    </literalExpression>
   </decision>
 
 </definitions>
