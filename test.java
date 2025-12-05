@@ -1,36 +1,28 @@
-<dependencies>
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-web</artifactId>
-    </dependency>
+@Autowired
+private ObjectMapper objectMapper;
 
-    <!-- Pour décoder les JWT -->
-    <dependency>
-        <groupId>com.auth0</groupId>
-        <artifactId>java-jwt</artifactId>
-        <version>4.4.0</version>
-    </dependency>
-</dependencies>
+public JsonNode loadTemplateJson() throws IOException {
+    InputStream is = getClass().getResourceAsStream("/template.json");
+    return objectMapper.readTree(is);
+}
 
 
+public ObjectNode buildFinalPayload(String vptoken) throws IOException {
+    ObjectNode root = (ObjectNode) loadTemplateJson();
+    root.put("vptoken", vptoken); // injection du token dynamique
+    return root;
+}
 
-@RestController
-@RequestMapping("/api")
-public class JwtController {
 
-    @PostMapping("/parse")
-    public Map<String, Object> parseJwt(@RequestBody Map<String, String> body) {
-        String token = body.get("jwt");
+public Mono<String> sendPayload(String vptoken) throws IOException {
 
-        DecodedJWT jwt = JWT.decode(token);
+    ObjectNode body = buildFinalPayload(vptoken);
 
-        Map<String, Object> response = new HashMap<>();
-        response.put("header", jwt.getHeader());
-        response.put("payload", jwt.getClaims());
-        response.put("issuer", jwt.getIssuer());
-        response.put("subject", jwt.getSubject());
-        response.put("expiresAt", jwt.getExpiresAt());
-
-        return response;
-    }
+    return WebClient.create()
+            .post()
+            .uri("https://autre-service.com/api/receive")
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(body)
+            .retrieve()
+            .bodyToMono(String.class);
 }
