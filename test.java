@@ -3,17 +3,18 @@ package com.example.worker;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.camunda.zeebe.client.api.worker.JobClient;
 import io.camunda.zeebe.client.api.response.ActivatedJob;
+import io.camunda.zeebe.client.api.worker.JobClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
+import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.*;
 import reactor.core.publisher.Mono;
 
-import java.io.InputStream;
 import java.util.*;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -21,7 +22,7 @@ import static org.mockito.Mockito.*;
 class RequestWalletDataWorkerTest {
 
     @Mock
-    private WebClient idactoWebClient;
+    private WebClient webClient;
 
     @Mock
     private IdactoProperties props;
@@ -38,20 +39,15 @@ class RequestWalletDataWorkerTest {
     @Mock
     private ActivatedJob job;
 
-    @Mock
-    private WebClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+    // WebClient mocks
+    @Mock private WebClient.RequestHeadersUriSpec<?> getSpec;
+    @Mock private WebClient.RequestHeadersSpec<?> retrieveSpecGet;
+    @Mock private WebClient.ResponseSpec responseSpecGet;
 
-    @Mock
-    private WebClient.RequestHeadersSpec<?> requestHeadersSpec;
-
-    @Mock
-    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
-
-    @Mock
-    private WebClient.RequestBodySpec requestBodySpec;
-
-    @Mock
-    private WebClient.ResponseSpec responseSpec;
+    @Mock private WebClient.RequestBodyUriSpec postSpec;
+    @Mock private WebClient.RequestBodySpec bodySpec;
+    @Mock private WebClient.RequestHeadersSpec<?> retrieveSpecPost;
+    @Mock private WebClient.ResponseSpec responseSpecPost;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -61,103 +57,111 @@ class RequestWalletDataWorkerTest {
     void setup() {
         MockitoAnnotations.openMocks(this);
 
-        // mock props
         when(props.authorizationPath()).thenReturn("/authorize");
         when(props.parseTokenPath()).thenReturn("/parse");
         when(props.templatePath()).thenReturn("/template.json");
 
-        // instantiate worker but bypass loadTemplateJson()
         worker = Mockito.spy(new RequestWalletDataWorker(
-                idactoWebClient, props, persistencePort, notifyCompletionUseCase, objectMapper
+                webClient,
+                props,
+                persistencePort,
+                notifyCompletionUseCase,
+                objectMapper
         ));
 
-        // inject fake template in spy
+        // Fake template JSON loaded instead of real classpath file
         ObjectNode fakeTemplate = JsonNodeFactory.instance.objectNode();
         fakeTemplate.put("staticField", "value");
-        Mockito.doReturn(fakeTemplate).when(worker).loadTemplateJson();
+        doReturn(fakeTemplate).when(worker).loadTemplateJson();
     }
 
-
-    // ---------------------------------------------------------
-    //                 TEST SCENARIO SUCCESS
-    // ---------------------------------------------------------
+    // -------------------------------------------------------------
+    //                       SUCCESS TEST
+    // -------------------------------------------------------------
     @Test
-    void shouldHandleRequestWalletDataSuccessfully() throws Exception {
+    void testSuccess() throws Exception {
 
         UUID requestId = UUID.randomUUID();
-
-        Map<String,Object> vars = new HashMap<>();
-        vars.put("requestId", requestId.toString());
-
-        AccessRequest accessRequest = mock(AccessRequest.class);
-        when(accessRequest.getResponseCode()).thenReturn("RCODE");
+        Map<String, Object> vars = Map.of("requestId", requestId.toString());
 
         when(job.getVariablesAsMap()).thenReturn(vars);
-        when(job.getKey()).thenReturn(10L);
+        when(job.getKey()).thenReturn(11L);
 
-        // persistence port
-        when(persistencePort.findById(requestId)).thenReturn(Optional.of(accessRequest));
+        // persistence
+        AccessRequest req = mock(AccessRequest.class);
+        when(req.getResponseCode()).thenReturn("RCODE");
+        when(persistencePort.findById(requestId)).thenReturn(Optional.of(req));
 
-        // mock WebClient GET → return vpToken
-        when(idactoWebClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("VP_TOKEN"));
+        // WebClient GET
+        when(webClient.get()).thenReturn(getSpec);
+        when(getSpec.uri(any())).thenReturn(retrieveSpecGet);
+        when(retrieveSpecGet.retrieve()).thenReturn(responseSpecGet);
+        when(responseSpecGet.bodyToMono(String.class)).thenReturn(Mono.just("VP_TOKEN"));
 
-        // mock WebClient POST → return parsed map
+        // WebClient POST
+        when(webClient.post()).thenReturn(postSpec);
+        when(postSpec.uri("/parse")).thenReturn(bodySpec);
+        when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
+        when(bodySpec.bodyValue(any(ObjectNode.class))).thenReturn(retrieveSpecPost);
+        when(retrieveSpecPost.retrieve()).thenReturn(responseSpecPost);
+
         Map<String,Object> parsedMap = Map.of("field", "parsedValue");
-
-        when(idactoWebClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri("/parse")).thenReturn(requestBodySpec);
-        when(requestBodySpec.contentType(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.bodyValue(any(ObjectNode.class))).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(Mockito.<ParameterizedTypeReference<Map<String, Object>>>any()))
+        when(responseSpecPost.bodyToMono(any(ParameterizedTypeReference.class)))
                 .thenReturn(Mono.just(parsedMap));
 
-        // Mock completion command
-        JobClient.FinalCommandStep finalCmd = mock(JobClient.FinalCommandStep.class);
-        when(jobClient.newCompleteCommand(10L)).thenReturn(mock(JobClient.FailCommandStep.class, RETURNS_DEEP_STUBS));
-        when(jobClient.newCompleteCommand(10L).variables(parsedMap).send()).thenReturn(CompletableFuture.completedFuture(null));
+        // Mock JobClient newCompleteCommand()
+        JobClient.NewCompleteCommandStep1 completeCmd =
+                mock(JobClient.NewCompleteCommandStep1.class, RETURNS_DEEP_STUBS);
 
-        // execute
+        when(jobClient.newCompleteCommand(11L)).thenReturn(completeCmd);
+        when(completeCmd.variables(parsedMap)).thenReturn(completeCmd);
+        when(completeCmd.send()).thenReturn(CompletableFuture.completedFuture(null));
+
+        // Execute worker
         worker.handleRequestWalletData(job, jobClient);
 
-        // verify: job completed
-        verify(jobClient.newCompleteCommand(10L).variables(parsedMap)).send();
+        // verify OK
+        verify(completeCmd).variables(parsedMap);
+        verify(completeCmd).send();
         verify(notifyCompletionUseCase, never()).notifyError(any(), any());
     }
 
 
-    // ---------------------------------------------------------
-    //                 TEST SCENARIO ERROR
-    // ---------------------------------------------------------
+    // -------------------------------------------------------------
+    //                       ERROR TEST
+    // -------------------------------------------------------------
     @Test
-    void shouldHandleErrorDuringProcessing() {
+    void testError() {
 
         UUID requestId = UUID.randomUUID();
         Map<String,Object> vars = Map.of("requestId", requestId.toString());
 
         when(job.getVariablesAsMap()).thenReturn(vars);
-        when(job.getKey()).thenReturn(20L);
+        when(job.getKey()).thenReturn(22L);
 
-        AccessRequest accessRequest = mock(AccessRequest.class);
-        when(accessRequest.getResponseCode()).thenReturn("RCODE");
-        when(persistencePort.findById(requestId)).thenReturn(Optional.of(accessRequest));
+        AccessRequest req = mock(AccessRequest.class);
+        when(req.getResponseCode()).thenReturn("RCODE");
+        when(persistencePort.findById(requestId)).thenReturn(Optional.of(req));
 
-        // force WebClient.get() to throw an exception
-        when(idactoWebClient.get()).thenThrow(new RuntimeException("Simulated error"));
+        // Force WebClient.get() to throw an error
+        when(webClient.get()).thenThrow(new RuntimeException("Simulated failure"));
 
-        // mock fail command
-        when(jobClient.newFailCommand(20L)).thenReturn(mock(JobClient.FailCommandStep.class, RETURNS_DEEP_STUBS));
-        when(jobClient.newFailCommand(20L).retries(0).errorMessage(any()).send())
-                .thenReturn(CompletableFuture.completedFuture(null));
+        // Mock fail command chain
+        JobClient.NewFailCommandStep1 failCmd =
+                mock(JobClient.NewFailCommandStep1.class, RETURNS_DEEP_STUBS);
 
-        // run
+        when(jobClient.newFailCommand(22L)).thenReturn(failCmd);
+        when(failCmd.retries(0)).thenReturn(failCmd);
+        when(failCmd.errorMessage(any())).thenReturn(failCmd);
+        when(failCmd.send()).thenReturn(CompletableFuture.completedFuture(null));
+
+        // Execute
         worker.handleRequestWalletData(job, jobClient);
 
-        // verify failure flow
-        verify(notifyCompletionUseCase).notifyError(eq(requestId), any(Exception.class));
-        verify(jobClient.newFailCommand(20L).retries(0)).errorMessage(any());
+        // Validate error path
+        verify(notifyCompletionUseCase).notifyError(eq(requestId), any());
+        verify(failCmd).retries(0);
+        verify(failCmd).errorMessage(any());
+        verify(failCmd).send();
     }
 }
