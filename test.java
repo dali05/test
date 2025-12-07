@@ -1,51 +1,68 @@
 @Test
-void testSuccess() throws Exception {
+void testGetVpToken() {
     // GIVEN
-    UUID id = UUID.randomUUID();
-
-    // variables du job
-    when(job.getVariablesAsMap())
-            .thenReturn(Map.of("requestId", id.toString()));
-
-    // AccessRequest trouvé en base
-    AccessRequest ar = mock(AccessRequest.class);
-    when(ar.getResponseCode()).thenReturn("K");
-    when(persistence.findById(id)).thenReturn(Optional.of(ar));
-
-    // On ne teste pas WebClient ici : on stub les méthodes du worker
-    doReturn("TOKEN123")
-            .when(worker)
-            .getVpToken(anyString(), anyString());
-
-    doReturn(Map.of("k", "v"))
-            .when(worker)
-            .parseVpToken(anyString());
-
-    // -----------------------------
-    // Mock Zeebe complete command
-    // -----------------------------
-    CompleteJobCommandStep1 completeStep = mock(CompleteJobCommandStep1.class);
-    ZeebeFuture<CompleteJobResponse> completeFuture = mock(ZeebeFuture.class);
-
-    when(jobClient.newCompleteCommand(job.getKey())).thenReturn(completeStep);
-
-    // Dans TA version de Zeebe, variables(...) renvoie le même step
-    when(completeStep.variables(any(Map.class))).thenReturn(completeStep);
-
-    // send() -> ZeebeFuture<CompleteJobResponse>
-    when(completeStep.send()).thenReturn(completeFuture);
-
-    // join() ne fait rien de spécial dans le test
-    when(completeFuture.join()).thenReturn(null);
+    when(webClient.get()).thenReturn(uriSpec);
+    when(uriSpec.uri(any())).thenReturn(headersSpec);
+    when(headersSpec.retrieve()).thenReturn(responseSpec);
+    when(responseSpec.bodyToMono(String.class))
+            .thenReturn(Mono.just("TOKEN123"));
 
     // WHEN
-    worker.handleRequestWalletData(job, jobClient);
+    String result = worker.getVpToken("tx123", "OK");
 
     // THEN
-    // le job est complété avec le bon payload
-    verify(jobClient).newCompleteCommand(job.getKey());
-    verify(completeStep).variables(Map.of("k", "v"));
-
-    // et aucune erreur n'est notifiée
-    verify(notifyUseCase, never()).notifyError(any(), any());
+    assertEquals("TOKEN123", result);
+    verify(webClient).get();
+    verify(uriSpec).uri(any());
+    verify(headersSpec).retrieve();
 }
+
+fakeTemplate = new ObjectMapper().createObjectNode();
+fakeTemplate.put("field", "value");
+doReturn(fakeTemplate).when(worker).loadTemplateJson();
+worker.templatePayload = fakeTemplate;
+
+
+
+@Test
+void testBuildFinalPayload() {
+    // GIVEN
+    worker.templatePayload = fakeTemplate;
+
+    // WHEN
+    ObjectNode result = worker.buildFinalPayload("MYTOKEN");
+
+    // THEN
+    assertEquals("MYTOKEN", result.get("vptoken").asText());
+    assertEquals("value", result.get("field").asText());
+}
+
+@Test
+void testParseVpToken() throws Exception {
+    // GIVEN
+    worker.templatePayload = fakeTemplate;
+
+    WebClient.RequestBodyUriSpec bodyUriSpec = mock(WebClient.RequestBodyUriSpec.class);
+    WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
+
+    when(webClient.post()).thenReturn(bodyUriSpec);
+    when(bodyUriSpec.uri(props.parseTokenPath())).thenReturn(bodySpec);
+    when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
+    when(bodySpec.bodyValue(any())).thenReturn(headersSpec);
+    when(headersSpec.retrieve()).thenReturn(responseSpec);
+
+    Map<String,Object> expectedMap = Map.of("k", "v");
+    when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+            .thenReturn(Mono.just(expectedMap));
+
+    // WHEN
+    Map<String,Object> result = worker.parseVpToken("AAA");
+
+    // THEN
+    assertEquals("v", result.get("k"));
+    verify(webClient).post();
+    verify(bodyUriSpec).uri(anyString());
+    verify(headersSpec).retrieve();
+}
+
+
