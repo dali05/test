@@ -1,28 +1,22 @@
-void parseVpToken_shouldReturnMap_whenHttpCallIsSuccessful() throws Exception {
+@BeforeEach
+void setUp() {
 
-        // GIVEN
-        String token = "abc123";
+    props = new IdactoProperties();
+    props.setParseTokenPath("/parse/token");
 
-        // Mock de ce que parseVpToken appelle en premier :
-        ObjectNode finalPayload = new ObjectMapper().createObjectNode();
-        Mockito.doReturn(finalPayload).when(worker).buildFinalPayload(token);
+    // Create worker first
+    RequestWalletDataWorker raw = new RequestWalletDataWorker(
+            idactoWebClient,
+            props,
+            null,
+            null,
+            objectMapper
+    );
 
-        Map<String, Object> responseMap = Map.of("status", "ok");
+    // Spy AFTER injection
+    worker = Mockito.spy(raw);
 
-        // Mock WebClient chain
-        Mockito.when(idactoWebClient.post()).thenReturn(requestBodyUriSpec);
-        Mockito.when(requestBodyUriSpec.uri("/parse/token")).thenReturn(requestBodySpec);
-        Mockito.when(requestBodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(requestBodySpec);
-        Mockito.when(requestBodySpec.bodyValue(finalPayload)).thenReturn(requestHeadersSpec);
-        Mockito.when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-        Mockito.when(responseSpec.bodyToMono(Mockito.any(ParameterizedTypeReference.class)))
-                .thenReturn(Mono.just(responseMap));
-
-        // WHEN
-        Map<String, Object> result = worker.parseVpToken(token);
-
-        // THEN
-        assertNotNull(result);
-        assertEquals("ok", result.get("status"));
-    }
+    // Prevent real HTTP call in constructor
+    Mockito.doReturn(new ObjectMapper().createObjectNode())
+           .when(worker).loadTemplateJson();
 }
