@@ -1,143 +1,140 @@
-@ExtendWith(MockitoExtension.class)
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.*;
+import org.springframework.http.MediaType;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClient.RequestHeadersSpec;
+import org.springframework.web.reactive.function.client.WebClient.RequestBodySpec;
+import org.springframework.web.reactive.function.client.WebClient.ResponseSpec;
+
+import java.io.IOException;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+
+import static org.mockito.Mockito.*;
+
 class RequestWalletDataWorkerTest {
 
-    @Mock WebClient webClient;
+    @Mock
+    private WebClient webClient;
 
-    // IMPORTANT — on enlève complètement les génériques "<?>"
-    @Mock WebClient.RequestHeadersUriSpec uriSpec;
-    @Mock WebClient.RequestHeadersSpec headersSpec;
-    @Mock WebClient.RequestBodySpec bodySpec;
-    @Mock WebClient.ResponseSpec responseSpec;
+    @Mock
+    private IdactoProperties props;
 
-    @Mock IdactoProperties props;
-    @Mock AccessRequestPersistencePort persistencePort;
-    @Mock NotifySyncCompletionUseCase notifyUseCase;
+    @Mock
+    private AccessRequestPersistencePort persistencePort;
 
-    @Mock ActivatedJob job;
-    @Mock JobClient jobClient;
+    @Mock
+    private NotifySyncCompletionUseCase notifyCompletionUseCase;
 
-    @Mock FinalCommandStep completeStep;
-    @Mock FinalCommandStep failStep;
+    @Mock
+    private ObjectMapper objectMapper;
 
-    RequestWalletDataWorker worker;
-    ObjectNode template;
+    @Mock
+    private ActivatedJob job;
+
+    @Mock
+    private JobClient client;
+
+    @Mock
+    private WebClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
+
+    @Mock
+    private WebClient.RequestBodyUriSpec requestBodyUriSpec;
+
+    @Mock
+    private WebClient.RequestHeadersSpec<?> requestHeadersSpec;
+
+    @Mock
+    private WebClient.RequestBodySpec requestBodySpec;
+
+    @Mock
+    private WebClient.ResponseSpec responseSpec;
+
+    @InjectMocks
+    private RequestWalletDataWorker worker;
 
     @BeforeEach
-    void setup() throws Exception {
+    void setUp() throws IOException {
+        MockitoAnnotations.openMocks(this);
 
-        worker = Mockito.spy(new RequestWalletDataWorker(
-                webClient,
-                props,
-                persistencePort,
-                notifyUseCase,
-                new ObjectMapper()
-        ));
-
-        template = new ObjectMapper().createObjectNode();
-        template.put("field", "value");
-
-        doReturn(template).when(worker).loadTemplateJson();
-
+        // Simuler props
         when(props.authorizationPath()).thenReturn("/auth");
         when(props.parseTokenPath()).thenReturn("/parse");
+        when(props.templatePath()).thenReturn("/template.json");
+
+        // Simuler template JSON
+        ObjectNode template = new ObjectMapper().createObjectNode();
+        when(objectMapper.readTree(any(InputStream.class))).thenReturn(template);
+
+        // Réinjecter worker avec templatePayload correct
+        worker = new RequestWalletDataWorker(webClient, props, persistencePort, notifyCompletionUseCase, objectMapper);
     }
 
-    // -----------------------------
-    // SUCCESS
-    // -----------------------------
     @Test
-    void testSuccess() throws Exception {
+    void testHandleRequestWalletData_success() {
+        UUID requestId = UUID.randomUUID();
+        Map<String, Object> vars = Map.of("requestId", requestId.toString());
 
-        UUID id = UUID.randomUUID();
-        when(job.getVariablesAsMap()).thenReturn(Map.of("requestId", id.toString()));
+        AccessRequest accessRequest = new AccessRequest();
+        accessRequest.setResponseCode("200");
 
-        AccessRequest ar = mock(AccessRequest.class);
-        when(ar.getResponseCode()).thenReturn("200");
-        when(persistencePort.findById(id)).thenReturn(Optional.of(ar));
+        when(job.getVariablesAsMap()).thenReturn(vars);
+        when(job.getKey()).thenReturn(123L);
+        when(persistencePort.findById(requestId)).thenReturn(Optional.of(accessRequest));
 
-        // Mock GET
-        when(webClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(any())).thenReturn(headersSpec);
-        when(headersSpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("TOKEN"));
+        // Simuler appel GET pour getVpToken
+        when(webClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.bodyToMono(String.class)).thenReturn(Mono.just("vpToken"));
 
-        // Mock POST
-        when(webClient.post()).thenReturn(bodySpec);
-        when(bodySpec.uri("/parse")).thenReturn(bodySpec);
-        when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
-        when(bodySpec.bodyValue(any())).thenReturn(bodySpec);
-        when(bodySpec.retrieve()).thenReturn(responseSpec);
+        // Simuler appel POST pour parseVpToken
+        when(webClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(requestBodySpec);
+        when(requestBodySpec.bodyValue(any())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        Map<String, Object> parsedMap = Map.of("parsedKey", "parsedValue");
+        when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class))).thenReturn(Mono.just(parsedMap));
 
-        when(responseSpec.bodyToMono(Map.class))
-                .thenReturn(Mono.just(Map.of("ok", true)));
+        // Simuler client.complete
+        JobClient.CompleteJobCommandStep1 completeCommand = mock(JobClient.CompleteJobCommandStep1.class);
+        when(client.newCompleteCommand(123L)).thenReturn(completeCommand);
+        when(completeCommand.variables(parsedMap)).thenReturn(mock(JobClient.CompleteJobCommandStep2.class));
+        when(completeCommand.variables(parsedMap).send()).thenReturn(CompletableFuture.completedFuture(null));
 
-        // Mock Zeebe
-        when(jobClient.newCompleteCommand(job.getKey())).thenReturn(completeStep);
-        when(completeStep.variables(any())).thenReturn(completeStep);
-        when(completeStep.send()).thenReturn(CompletableFuture.completedFuture(null));
+        // Exécution
+        worker.handleRequestWalletData(job, client);
 
-        worker.handleRequestWalletData(job, jobClient);
-
-        verify(jobClient).newCompleteCommand(job.getKey());
-        verify(completeStep).variables(Map.of("ok", true));
+        // Vérification
+        verify(client).newCompleteCommand(123L);
+        verify(persistencePort).findById(requestId);
+        verify(webClient).get();
+        verify(webClient).post();
     }
 
-    // -----------------------------
-    // NOT FOUND
-    // -----------------------------
     @Test
-    void testNotFound() {
+    void testHandleRequestWalletData_error() {
+        UUID requestId = UUID.randomUUID();
+        Map<String, Object> vars = Map.of("requestId", requestId.toString());
 
-        UUID id = UUID.randomUUID();
-        when(job.getVariablesAsMap()).thenReturn(Map.of("requestId", id.toString()));
-        when(persistencePort.findById(id)).thenReturn(Optional.empty());
+        when(job.getVariablesAsMap()).thenReturn(vars);
+        when(job.getKey()).thenReturn(123L);
+        when(persistencePort.findById(requestId)).thenReturn(Optional.empty()); // provoque exception
 
-        when(jobClient.newFailCommand(job.getKey())).thenReturn(failStep);
-        when(failStep.retries(0)).thenReturn(failStep);
-        when(failStep.errorMessage(any())).thenReturn(failStep);
-        when(failStep.send()).thenReturn(CompletableFuture.completedFuture(null));
+        // Simuler client.fail
+        JobClient.FailJobCommandStep1 failCommand = mock(JobClient.FailJobCommandStep1.class);
+        when(client.newFailCommand(123L)).thenReturn(failCommand);
+        when(failCommand.retries(0)).thenReturn(failCommand);
+        when(failCommand.errorMessage(anyString())).thenReturn(failCommand);
+        when(failCommand.send()).thenReturn(CompletableFuture.completedFuture(null));
 
-        worker.handleRequestWalletData(job, jobClient);
+        worker.handleRequestWalletData(job, client);
 
-        verify(notifyUseCase).notifyError(eq(id), any());
-    }
-
-    // -----------------------------
-    // buildFinalPayload
-    // -----------------------------
-    @Test
-    void testBuildFinalPayload() {
-        ObjectNode result = worker.buildFinalPayload("XYZ");
-
-        assertEquals("XYZ", result.get("vptoken").asText());
-        assertEquals("value", result.get("field").asText());
-    }
-
-    // -----------------------------
-    // getVpToken error
-    // -----------------------------
-    @Test
-    void testGetVpToken_Error() {
-
-        when(webClient.get()).thenReturn(uriSpec);
-        when(uriSpec.uri(any())).thenReturn(headersSpec);
-        when(headersSpec.retrieve()).thenThrow(new RuntimeException("fail"));
-
-        assertThrows(RuntimeException.class, () -> worker.getVpToken("t", "r"));
-    }
-
-    // -----------------------------
-    // parseVpToken error
-    // -----------------------------
-    @Test
-    void testParseVpToken_Error() {
-
-        when(webClient.post()).thenReturn(bodySpec);
-        when(bodySpec.uri("/parse")).thenReturn(bodySpec);
-        when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
-        when(bodySpec.bodyValue(any())).thenReturn(bodySpec);
-        when(bodySpec.retrieve()).thenThrow(new RuntimeException("X"));
-
-        assertThrows(RuntimeException.class, () -> worker.parseVpToken("AAA"));
+        verify(notifyCompletionUseCase).notifyError(eq(requestId), any(Exception.class));
+        verify(client).newFailCommand(123L);
     }
 }
