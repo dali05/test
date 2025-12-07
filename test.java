@@ -1,49 +1,14 @@
-@ExtendWith(MockitoExtension.class)
-class RequestWalletDataWorkerTest {
+Test
+void testWalletRequest() {
 
-    @Mock(answer = Answers.RETURNS_DEEP_STUBS)
-    private WebClient idactoWebClient;
+    when(webClient.get()).thenReturn(requestHeadersUriSpec);
+    when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersSpec);
+    when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
-    private RequestWalletDataWorker worker;
-    private IdactoProperties props;
+    when(responseSpec.bodyToMono(String.class))
+            .thenReturn(Mono.just("mock-response"));
 
-    @BeforeEach
-    void setUp() {
-        props = new IdactoProperties();
-        props.setAuthorizationPath("/auth/token");
+    // call method under test
+    var result = worker.requestWalletData();
 
-        worker = Mockito.spy(new RequestWalletDataWorker(
-                idactoWebClient,
-                props,
-                null,
-                null,
-                new ObjectMapper()
-        ));
-
-        // On évite que loadTemplateJson() charge un vrai fichier
-        Mockito.doReturn(new ObjectMapper().createObjectNode())
-                .when(worker)
-                .loadTemplateJson();
-    }
-
-    @Test
-    void getVpToken_shouldReturnToken_whenServiceResponds() {
-
-        // GIVEN
-        String expectedToken = "TOKEN-1234";
-
-        Mockito.when(
-                idactoWebClient
-                        .get()
-                        .uri(any(Function.class))
-                        .retrieve()
-                        .bodyToMono(String.class)
-        ).thenReturn(Mono.just(expectedToken));
-
-        // WHEN
-        String result = worker.getVpToken("TX999", "200");
-
-        // THEN
-        assertEquals(expectedToken, result);
-    }
-}
+    assertEquals("mock-response", result.block());
