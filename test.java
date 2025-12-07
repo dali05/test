@@ -1,40 +1,56 @@
 @Test
-void testNotFound() {
+void testSuccess() throws Exception {
     UUID id = UUID.randomUUID();
 
     when(job.getVariablesAsMap())
             .thenReturn(Map.of("requestId", id.toString()));
 
-    when(persistence.findById(id))
-            .thenReturn(Optional.empty());
+    // Persistence returns an AccessRequest OK
+    AccessRequest ar = mock(AccessRequest.class);
+    when(ar.getResponseCode()).thenReturn("K");
+    when(persistence.findById(id)).thenReturn(Optional.of(ar));
 
-    // --- Mock Zeebe fail command chain (your Zeebe version) ---
+    //
+    // ---- Mock WebClient getVpToken() ----
+    //
+    when(idactoWebClient.get()).thenReturn(uriSpec);
+    when(uriSpec.uri(any())).thenReturn(headersSpec);
+    when(headersSpec.retrieve()).thenReturn(responseSpec);
+    when(responseSpec.bodyToMono(String.class))
+            .thenReturn(Mono.just("TOKEN123"));
 
-    FailJobCommandStep1 fail1 = mock(FailJobCommandStep1.class);
-    FailJobCommandStep1.FailJobCommandStep2 fail2 =
-            mock(FailJobCommandStep1.FailJobCommandStep2.class);
+    //
+    // ---- Mock WebClient parseVpToken() ----
+    //
+    when(idactoWebClient.post()).thenReturn(bodySpec);
+    when(bodySpec.uri(props.parseTokenPath())).thenReturn(bodySpec);
+    when(bodySpec.contentType(MediaType.APPLICATION_JSON)).thenReturn(bodySpec);
+    when(bodySpec.bodyValue(any())).thenReturn(headersSpec);
+    when(headersSpec.retrieve()).thenReturn(responseSpec);
+    when(responseSpec.bodyToMono(any(ParameterizedTypeReference.class)))
+            .thenReturn(Mono.just(Map.of("k", "v")));
 
-    // IMPORTANT → ZeebeFuture<FailJobResponse>
-    ZeebeFuture<FailJobResponse> future = mock(ZeebeFuture.class);
+    //
+    // ---- Mock Zeebe Complete Command ----
+    //
+    CompleteJobCommandStep1 complete1 = mock(CompleteJobCommandStep1.class);
+    FinalCommandStep<Void> finalComplete = mock(FinalCommandStep.class);
 
-    // join() must return a FailJobResponse (or null is acceptable)
+    ZeebeFuture<CompleteJobResponse> future = mock(ZeebeFuture.class);
     when(future.join()).thenReturn(null);
 
-    // newFailCommand → step1
-    when(jobClient.newFailCommand(job.getKey())).thenReturn(fail1);
+    when(jobClient.newCompleteCommand(job.getKey())).thenReturn(complete1);
+    when(complete1.variables(any(Map.class))).thenReturn(finalComplete);
+    when(finalComplete.send()).thenReturn(future);
 
-    // retries → step2
-    when(fail1.retries(0)).thenReturn(fail2);
-
-    // errorMessage → SAME step2
-    when(fail2.errorMessage(anyString())).thenReturn(fail2);
-
-    // send() → ZeebeFuture<FailJobResponse>
-    when(fail2.send()).thenReturn(future);
-
-    // --- Execute ---
+    //
+    // ---- Execute worker ----
+    //
     worker.handleRequestWalletData(job, jobClient);
 
-    // --- Verify ---
-    verify(notifyUseCase).notifyError(eq(id), any());
+    //
+    // ---- Verify ----
+    //
+    verify(complete1).variables(Map.of("k", "v"));
+    verify(jobClient).newCompleteCommand(job.getKey());
 }
