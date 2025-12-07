@@ -1,22 +1,21 @@
-   @Test
-    void testBuildFinalPayload() {
+Test
+    void getVpToken_shouldReturnToken_whenServiceResponds() {
+
         // GIVEN
-        ObjectMapper mapper = new ObjectMapper();
+        String expectedToken = "TOKEN-1234";
 
-        // Template simulé : { "foo": "bar" }
-        ObjectNode template = mapper.createObjectNode();
-        template.put("foo", "bar");
-
-        // deepCopy renvoie une copie du template
-        when(templatePayload.deepCopy()).thenReturn(template);
+        Mockito.when(
+                idactoWebClient
+                        .get()
+                        .uri(any(Function.class))
+                        .retrieve()
+                        .bodyToMono(String.class)
+        ).thenReturn(Mono.just(expectedToken));
 
         // WHEN
-        ObjectNode result = service.buildFinalPayload("ABC123");
+        String result = worker.getVpToken("TX999", "200");
 
         // THEN
-        assertNotNull(result);
-        assertEquals("bar", result.get("foo").asText());
-        assertEquals("ABC123", result.get("vptoken").asText());
-
-        // Vérifier que le template original n’est pas modifié
-        assertFalse(templatePayload.has("vptoke
+        assertEquals(expectedToken, result);
+    }
+}
