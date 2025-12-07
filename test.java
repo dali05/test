@@ -1,14 +1,27 @@
 Test
-void testWalletRequest() {
+    void getVpToken_shouldReturnString() {
+        // Arrange
+        String transactionId = "T123";
+        String responseCode = "00";
+        String expectedResponse = "my-token";
 
-    when(webClient.get()).thenReturn(requestHeadersUriSpec);
-    when(requestHeadersUriSpec.uri(any(Function.class))).thenReturn(requestHeadersSpec);
-    when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+        // Chaînage WebClient mocké :
+        when(idactoWebClient.get()).thenReturn(headersUriSpec);
 
-    when(responseSpec.bodyToMono(String.class))
-            .thenReturn(Mono.just("mock-response"));
+        // Mock du .uri(Function)
+        when(headersUriSpec.uri(any(Function.class))).thenReturn(headersSpec);
 
-    // call method under test
-    var result = worker.requestWalletData();
+        // Mock du .retrieve()
+        when(headersSpec.retrieve()).thenReturn(responseSpec);
 
-    assertEquals("mock-response", result.block());
+        // Mock du .bodyToMono()
+        when(responseSpec.bodyToMono(String.class))
+                .thenReturn(Mono.just(expectedResponse));
+
+        // Act
+        String result = worker.getVpToken(transactionId, responseCode);
+
+        // Assert
+        assertEquals(expectedResponse, result);
+    }
+}
