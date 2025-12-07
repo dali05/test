@@ -8,25 +8,28 @@ void testNotFound() {
     when(persistence.findById(id))
             .thenReturn(Optional.empty());
 
-    // --- Mock Zeebe Fail Command (version Zeebe où errorMessage returns Step2) ---
+    // --- Mock Zeebe fail command chain (your Zeebe version) ---
 
     FailJobCommandStep1 fail1 = mock(FailJobCommandStep1.class);
     FailJobCommandStep1.FailJobCommandStep2 fail2 =
             mock(FailJobCommandStep1.FailJobCommandStep2.class);
 
-    ZeebeFuture<Void> future = mock(ZeebeFuture.class);
+    // IMPORTANT → ZeebeFuture<FailJobResponse>
+    ZeebeFuture<FailJobResponse> future = mock(ZeebeFuture.class);
+
+    // join() must return a FailJobResponse (or null is acceptable)
     when(future.join()).thenReturn(null);
 
-    // Start chain
+    // newFailCommand → step1
     when(jobClient.newFailCommand(job.getKey())).thenReturn(fail1);
 
-    // retries → Step2
+    // retries → step2
     when(fail1.retries(0)).thenReturn(fail2);
 
-    // errorMessage → returns the same Step2
+    // errorMessage → SAME step2
     when(fail2.errorMessage(anyString())).thenReturn(fail2);
 
-    // send → returns ZeebeFuture
+    // send() → ZeebeFuture<FailJobResponse>
     when(fail2.send()).thenReturn(future);
 
     // --- Execute ---
