@@ -1,11 +1,22 @@
-WebClient.RequestBodyUriSpec uriSpec = mock(WebClient.RequestBodyUriSpec.class);
-WebClient.RequestBodySpec bodySpec = mock(WebClient.RequestBodySpec.class);
-WebClient.RequestHeadersSpec headersSpec = mock(WebClient.RequestHeadersSpec.class);
-WebClient.ResponseSpec responseSpec = mock(WebClient.ResponseSpec.class);
+   @Test
+    void testBuildFinalPayload() {
+        // GIVEN
+        ObjectMapper mapper = new ObjectMapper();
 
-when(webClient.post()).thenReturn(uriSpec);
-when(uriSpec.uri(anyString())).thenReturn(bodySpec);
-when(bodySpec.contentType(any())).thenReturn(bodySpec);
-when(bodySpec.bodyValue(any())).thenReturn(headersSpec);
-when(headersSpec.retrieve()).thenReturn(responseSpec);
-when(responseSpec.bodyToMono(any(Class.class))).thenReturn(Mono.just(...));
+        // Template simulé : { "foo": "bar" }
+        ObjectNode template = mapper.createObjectNode();
+        template.put("foo", "bar");
+
+        // deepCopy renvoie une copie du template
+        when(templatePayload.deepCopy()).thenReturn(template);
+
+        // WHEN
+        ObjectNode result = service.buildFinalPayload("ABC123");
+
+        // THEN
+        assertNotNull(result);
+        assertEquals("bar", result.get("foo").asText());
+        assertEquals("ABC123", result.get("vptoken").asText());
+
+        // Vérifier que le template original n’est pas modifié
+        assertFalse(templatePayload.has("vptoke
