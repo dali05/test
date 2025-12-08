@@ -1,27 +1,27 @@
-Test
-    void getVpToken_shouldReturnString() {
-        // Arrange
-        String transactionId = "T123";
-        String responseCode = "00";
-        String expectedResponse = "my-token";
+import io.netty.handler.proxy.ProxyProvider;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
 
-        // Chaînage WebClient mocké :
-        when(idactoWebClient.get()).thenReturn(headersUriSpec);
+@Configuration
+public class WebClientConfig {
 
-        // Mock du .uri(Function)
-        when(headersUriSpec.uri(any(Function.class))).thenReturn(headersSpec);
+    @Bean
+    public WebClient webClient() {
 
-        // Mock du .retrieve()
-        when(headersSpec.retrieve()).thenReturn(responseSpec);
+        HttpClient httpClient = HttpClient.create()
+                .proxy(proxy -> proxy
+                        .type(ProxyProvider.Proxy.HTTP)
+                        .host("10.175.113.1")
+                        .port(3128)
+                        .username("h93588")
+                        .password(password -> "TON_MOT_DE_PASSE")
+                );
 
-        // Mock du .bodyToMono()
-        when(responseSpec.bodyToMono(String.class))
-                .thenReturn(Mono.just(expectedResponse));
-
-        // Act
-        String result = worker.getVpToken(transactionId, responseCode);
-
-        // Assert
-        assertEquals(expectedResponse, result);
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
     }
 }
