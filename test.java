@@ -1,27 +1,18 @@
-import io.netty.handler.proxy.ProxyProvider;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.reactive.ReactorClientHttpConnector;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.netty.http.client.HttpClient;
+@Bean
+public WebClient webClient() {
 
-@Configuration
-public class WebClientConfig {
+    HttpClient httpClient = HttpClient.create()
+            .tcpConfiguration(tcpClient ->
+                tcpClient.doOnConnected(conn ->
+                    conn.addHandlerFirst(new HttpProxyHandler(
+                            new InetSocketAddress("10.175.113.1", 3128),
+                            "h93588",
+                            "TON_MOT_DE_PASSE"
+                    ))
+                )
+            );
 
-    @Bean
-    public WebClient webClient() {
-
-        HttpClient httpClient = HttpClient.create()
-                .proxy(proxy -> proxy
-                        .type(ProxyProvider.Proxy.HTTP)
-                        .host("10.175.113.1")
-                        .port(3128)
-                        .username("h93588")
-                        .password(password -> "TON_MOT_DE_PASSE")
-                );
-
-        return WebClient.builder()
-                .clientConnector(new ReactorClientHttpConnector(httpClient))
-                .build();
-    }
+    return WebClient.builder()
+            .clientConnector(new ReactorClientHttpConnector(httpClient))
+            .build();
 }
