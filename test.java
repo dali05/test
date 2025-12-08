@@ -1,18 +1,12 @@
-@Bean
-public WebClient webClient() {
+-Dhttp.proxyHost=10.175.113.1
+-Dhttp.proxyPort=3128
+-Dhttps.proxyHost=10.175.113.1
+-Dhttps.proxyPort=3128
 
-    HttpClient httpClient = HttpClient.create()
-            .tcpConfiguration(tcpClient ->
-                tcpClient.doOnConnected(conn ->
-                    conn.addHandlerFirst(new HttpProxyHandler(
-                            new InetSocketAddress("10.175.113.1", 3128),
-                            "h93588",
-                            "TON_MOT_DE_PASSE"
-                    ))
-                )
-            );
+-Dhttp.proxyUser=h93588
+-Dhttp.proxyPassword=TON_MOT_DE_PASSE
 
-    return WebClient.builder()
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
-}
+-Dhttps.proxyUser=h93588
+-Dhttps.proxyPassword=TON_MOT_DE_PASSE
+
+-Dhttp.nonProxyHosts="localhost|*.echonet|*.xpf.net.intra"
