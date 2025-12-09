@@ -1,16 +1,28 @@
-@Bean
-public HttpClient httpClient() {
+@Configuration
+@EnableConfigurationProperties(ProxyProperties.class)
+public class WebClientConfig {
 
-    return HttpClient.create()
-            // Désactive toute résolution DNS locale
-            .resolver(NoopAddressResolverGroup.INSTANCE)
+    @Bean
+    public WebClient webClient(ProxyProperties proxyProps) {
 
-            // Définit le proxy AVANT l’ouverture de la connexion
-            .proxy(proxy -> proxy
+        HttpClient client = HttpClient.create();
+
+        if (proxyProps.isEnabled()) {
+            client = client
+                .resolver(NoopAddressResolverGroup.INSTANCE)
+                .proxy(proxy -> proxy
                     .type(ProxyProvider.Proxy.HTTP)
-                    .host("10.175.113.1")
-                    .port(3128)
-                    .username("h93588")
-                    .password(pass -> "Bonjournp@2026")
-            );
+                    .host(proxyProps.getHost())
+                    .port(proxyProps.getPort())
+                    .username(proxyProps.getUsername())
+                    .password(pass -> proxyProps.getPassword())
+                );
+        }
+
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(client))
+                .build();
+    }
 }
+
+
