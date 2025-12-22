@@ -1,22 +1,39 @@
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { userManager } from "./config";
+setUserInfo(
+  state: WritableDraft<User>,
+  action: PayloadAction<UserProfile>
+): void {
+  const habilitations = Array.isArray(action.payload.habilitations)
+    ? action.payload.habilitations
+    : [];
 
-export default function Callback() {
-  const navigate = useNavigate();
+  const roles: Role[] = Array.isArray(habilitations?.[0]?.roles)
+    ? habilitations[0].roles
+    : [];
 
-  useEffect(() => {
-    userManager
-      .signinRedirectCallback()
-      .then(user => {
-        console.log("✅ User logged in", user);
-        navigate("/");
-      })
-      .catch(err => {
-        console.error("❌ Callback error", err);
-        navigate("/login");
-      });
-  }, [navigate]);
+  const storedRole = localStorage.getItem("role");
 
-  return <div>Connexion en cours...</div>;
+  state.userName = action.payload.name ?? "User";
+
+  if (storedRole) {
+    state.isAdmin = storedRole === "ADMIN";
+    state.isAudit = storedRole === "AUDIT";
+    state.navigationTab = navigation.filter(
+      nav => nav.role === storedRole
+    );
+    return;
+  }
+
+  const hasAdmin = roles.some(r => r?.libelle === "ADMIN");
+  const hasAudit = roles.some(r => r?.libelle === "AUDIT");
+
+  state.isAdmin = hasAdmin;
+  state.isAudit = hasAudit;
+
+  if (hasAudit) {
+    state.navigationTab = navigation.filter(nav => nav.role === "AUDIT");
+  } else if (hasAdmin) {
+    state.navigationTab = navigation.filter(nav => nav.role === "ADMIN");
+  } else {
+    state.navigationTab = [];
+  }
 }
