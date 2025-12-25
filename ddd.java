@@ -1,3 +1,5 @@
-const roles: Role[] = Array.isArray(habilitations?.[0]?.roles)
-  ? habilitations[0].roles
-  : [];
+docker run -d --name keycloak \
+-p 8080:8080 \
+-e KEYCLOAK_ADMIN=admin \
+-e KEYCLOAK_ADMIN_PASSWORD=admin \
+quay.io/keycloak/keycloak start-dev
