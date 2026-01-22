@@ -1,1 +1,3 @@
-psql "$DATABASE_URL" -f /sql/init.sq
+volumeMounts:
+  - name: db-init-sql
+    mountPath: /sql
