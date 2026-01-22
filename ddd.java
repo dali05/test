@@ -1,23 +1,3 @@
-
-
-liquibase:
-  job:
-    extraEnv:
-      - name: POSTGRES_HOST
-        value: "postgresql.ns-postgresql.svc.cluster.local"
-
-      - name: POSTGRES_PORT
-        value: "5432"
-
-      - name: POSTGRES_DATABASE
-        value: "ibmclouddb"
-
-      - name: PF_LIQUIBASE_COMMAND_USERNAME
-        value: "vault:database/postgres/pg000000/creds/own_pg000000_ibmclouddb#username"
-
-      - name: PF_LIQUIBASE_COMMAND_PASSWORD
-        value: "vault:database/postgres/pg000000/creds/own_pg000000_ibmclouddb#password"
-
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -34,11 +14,16 @@ spec:
 
       containers:
         - name: bootstrap
-          image: postgres:15-alpine
+          image: ap27627-docker-pf.artifactory-dogen.group.echonet/bnpp-pf/liquibase-postgres:4.32.0-1
 
           env:
             {{- /*
-              Remap root values for common-library
+              La common-library attend certaines clés à la racine:
+              - .Values.hashicorp
+              - .Values.serviceAccount
+              - .Values.selectors
+              Or chez toi elles sont sous .Values.liquibase.*
+              On "remonte" ces clés via un contexte artificiel.
             */ -}}
             {{- $vals := merge (deepCopy .Values) (dict
                 "hashicorp" .Values.liquibase.hashicorp
@@ -53,10 +38,10 @@ spec:
                 "Template" .Template
               -}}
 
-            {{- /* Vault env */ -}}
+            {{- /* Injection Vaultenv (résout les vault:... en valeurs réelles) */ -}}
             {{- include "common-library.hashicorp.vaultenv" $ctx | nindent 12 }}
 
-            {{- /* DB + creds from liquibase.job.extraEnv */ -}}
+            {{- /* Variables liquibase (URL, username, password, changelog, etc.) */ -}}
             {{- with .Values.liquibase.job.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -68,18 +53,16 @@ spec:
 
               echo "Bootstrap: creating schema 'admin' if not exists..."
 
-              : "${POSTGRES_HOST:?POSTGRES_HOST is required}"
-              : "${POSTGRES_PORT:?POSTGRES_PORT is required}"
-              : "${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}"
-              : "${PF_LIQUIBASE_COMMAND_USERNAME:?USERNAME is required}"
-              : "${PF_LIQUIBASE_COMMAND_PASSWORD:?PASSWORD is required}"
+              : "${PF_LIQUIBASE_COMMAND_URL:?PF_LIQUIBASE_COMMAND_URL is required}"
+              : "${PF_LIQUIBASE_COMMAND_USERNAME:?PF_LIQUIBASE_COMMAND_USERNAME is required}"
+              : "${PF_LIQUIBASE_COMMAND_PASSWORD:?PF_LIQUIBASE_COMMAND_PASSWORD is required}"
 
-              export PGHOST="$POSTGRES_HOST"
-              export PGPORT="$POSTGRES_PORT"
-              export PGDATABASE="$POSTGRES_DATABASE"
-              export PGUSER="$PF_LIQUIBASE_COMMAND_USERNAME"
-              export PGPASSWORD="$PF_LIQUIBASE_COMMAND_PASSWORD"
-
-              psql -v ON_ERROR_STOP=1 -c 'CREATE SCHEMA IF NOT EXISTS admin;'
+              # Exécute un SQL simple AVANT le job Liquibase principal
+              liquibase \
+                --url="$PF_LIQUIBASE_COMMAND_URL" \
+                --username="$PF_LIQUIBASE_COMMAND_USERNAME" \
+                --password="$PF_LIQUIBASE_COMMAND_PASSWORD" \
+                executeSql \
+                --sql="CREATE SCHEMA IF NOT EXISTS admin;"
 
               echo "OK: schema admin exists."
