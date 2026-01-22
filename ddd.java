@@ -1,19 +1,39 @@
-extraEnv:
-  - name: PF_LIQUIBASE_COMMAND_URL
-    value: "jdbc:postgresql://postgresql.ns-postgresql.svc.cluster.local:5432/ibmclouddb?currentSchema=admin"
+liquibase:
+  job:
+    # ✅ AJOUTE CETTE PARTIE
+    initContainers:
+      - name: create-admin-schema
+        image:
+          # Reprends la même image que ton job si elle contient psql
+          # (sinon il faut une image "toolbox" qui a psql + vault-env)
+          fullName: wall-e-sql
+          pullPolicy: Never
 
-  - name: PF_LIQUIBASE_COMMAND_USERNAME
-    value: "vault:database/postgres/...#username"
+        command: ["sh", "-c"]
+        args:
+          - |
+            set -euo pipefail
+            echo "[init] Create schema admin if not exists"
 
-  - name: PF_LIQUIBASE_COMMAND_PASSWORD
-    value: "vault:database/postgres/...#password"
+            # PF_LIQUIBASE_COMMAND_URL est en jdbc:postgresql://...
+            # psql ne comprend pas "jdbc:" => on enlève le préfixe
+            PGURL="${PF_LIQUIBASE_COMMAND_URL#jdbc:}"
 
-  - name: PF_LIQUIBASE_COMMAND_CHANGELOG_FILE
-    value: db/changelog/db.changelog-master.yaml
+            # Pour l'init : on enlève currentSchema=admin pour ne pas dépendre du schéma
+            PGURL="$(echo "$PGURL" | sed 's/[?&]currentSchema=[^&]*//g' | sed 's/?&/?/g' | sed 's/[?]$//g')"
 
-  # 🔴 MANQUAIT ICI 🔴
-  - name: LIQUIBASE_DEFAULT_SCHEMA_NAME
-    value: admin
+            export PGPASSWORD="$PF_LIQUIBASE_COMMAND_PASSWORD"
 
-  - name: LIQUIBASE_LIQUIBASE_SCHEMA_NAME
-    value: admin
+            echo "[init] PGURL=$PGURL"
+            psql "$PGURL" -U "$PF_LIQUIBASE_COMMAND_USERNAME" -v ON_ERROR_STOP=1 \
+              -c 'CREATE SCHEMA IF NOT EXISTS "admin";'
+
+            echo "[init] Schema admin ready"
+
+        env:
+          - name: PF_LIQUIBASE_COMMAND_URL
+            value: "jdbc:postgresql://postgresql.ns-postgresql.svc.cluster.local:5432/ibmclouddb?currentSchema=admin"
+          - name: PF_LIQUIBASE_COMMAND_USERNAME
+            value: "vault:database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb#username"
+          - name: PF_LIQUIBASE_COMMAND_PASSWORD
+            value: "vault:database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb#password"
