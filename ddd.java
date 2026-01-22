@@ -18,12 +18,7 @@ spec:
 
           env:
             {{- /*
-              La common-library attend certaines clés à la racine:
-              - .Values.hashicorp
-              - .Values.serviceAccount
-              - .Values.selectors
-              Or chez toi elles sont sous .Values.liquibase.*
-              On "remonte" ces clés via un contexte artificiel.
+              Remap root values for common-library
             */ -}}
             {{- $vals := merge (deepCopy .Values) (dict
                 "hashicorp" .Values.liquibase.hashicorp
@@ -38,15 +33,10 @@ spec:
                 "Template" .Template
               -}}
 
-            {{- /* Injection Vaultenv (résout les vault:... en valeurs réelles) */ -}}
+            {{- /* Vault env */ -}}
             {{- include "common-library.hashicorp.vaultenv" $ctx | nindent 12 }}
 
-            {{- /* Variables DB host/port/db (tu les as dans values.yaml sous backend.extraEnv) */ -}}
-            {{- with .Values.backend.extraEnv }}
-            {{- toYaml . | nindent 12 }}
-            {{- end }}
-
-            {{- /* Variables liquibase (username/password, url, etc. sous liquibase.job.extraEnv) */ -}}
+            {{- /* DB + creds from liquibase.job.extraEnv */ -}}
             {{- with .Values.liquibase.job.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -61,8 +51,8 @@ spec:
               : "${POSTGRES_HOST:?POSTGRES_HOST is required}"
               : "${POSTGRES_PORT:?POSTGRES_PORT is required}"
               : "${POSTGRES_DATABASE:?POSTGRES_DATABASE is required}"
-              : "${PF_LIQUIBASE_COMMAND_USERNAME:?PF_LIQUIBASE_COMMAND_USERNAME is required}"
-              : "${PF_LIQUIBASE_COMMAND_PASSWORD:?PF_LIQUIBASE_COMMAND_PASSWORD is required}"
+              : "${PF_LIQUIBASE_COMMAND_USERNAME:?USERNAME is required}"
+              : "${PF_LIQUIBASE_COMMAND_PASSWORD:?PASSWORD is required}"
 
               export PGHOST="$POSTGRES_HOST"
               export PGPORT="$POSTGRES_PORT"
