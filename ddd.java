@@ -38,15 +38,15 @@ spec:
                 "Template" .Template
               -}}
 
-            {{- /* Injection Vaultenv (même mécanique que le job Liquibase) */ -}}
+            {{- /* Injection Vaultenv (résout les vault:... en valeurs réelles) */ -}}
             {{- include "common-library.hashicorp.vaultenv" $ctx | nindent 12 }}
 
-            {{- /* Variables DB host/port/db (déjà présentes chez toi) */ -}}
+            {{- /* Variables DB host/port/db (tu les as dans values.yaml sous backend.extraEnv) */ -}}
             {{- with .Values.backend.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
 
-            {{- /* Variables Liquibase creds (USERNAME/PASSWORD via vault:...) */ -}}
+            {{- /* Variables liquibase (username/password, url, etc. sous liquibase.job.extraEnv) */ -}}
             {{- with .Values.liquibase.job.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
