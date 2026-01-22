@@ -1,3 +1,23 @@
+
+
+liquibase:
+  job:
+    extraEnv:
+      - name: POSTGRES_HOST
+        value: "postgresql.ns-postgresql.svc.cluster.local"
+
+      - name: POSTGRES_PORT
+        value: "5432"
+
+      - name: POSTGRES_DATABASE
+        value: "ibmclouddb"
+
+      - name: PF_LIQUIBASE_COMMAND_USERNAME
+        value: "vault:database/postgres/pg000000/creds/own_pg000000_ibmclouddb#username"
+
+      - name: PF_LIQUIBASE_COMMAND_PASSWORD
+        value: "vault:database/postgres/pg000000/creds/own_pg000000_ibmclouddb#password"
+
 apiVersion: batch/v1
 kind: Job
 metadata:
