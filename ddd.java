@@ -1,6 +1,1 @@
-java -jar /liquibase/liquibase.jar \
-  --url="${PF_LIQUIBASE_COMMAND_URL}" \
-  --username="${PF_LIQUIBASE_COMMAND_USERNAME}" \
-  --password="${PF_LIQUIBASE_COMMAND_PASSWORD}" \
-  executeSql \
-  --sql="CREATE SCHEMA IF NOT EXISTS ${LIQUIBASE_DEFAULT_SCHEMA_NAME};"
+kubectl logs -n ns-wall-e-springboot wall-e-db-bootstrap-fb9qp -c liquibase --tail=200
