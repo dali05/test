@@ -74,8 +74,8 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ .Release.Name }}-db-init
+  name: wall-e-db-init
+  namespace: ns-wall-e-springboot
 data:
   init.sql: |
-{{ .Files.Get "sql/init.sql" | indent 4 }}
-
+    CREATE SCHEMA IF NOT EXISTS admin;
