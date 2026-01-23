@@ -32,10 +32,17 @@ spec:
               echo "=== Bootstrap schema done ==="
 
           env:
-            # 🔁 Réutilisation EXACTE des env Liquibase (Vault inclus)
+            # 1) On réutilise les env Liquibase (Vault:...#username/#password, etc.)
 {{ toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
 
-            # ➕ Variables standard reconnues par psql
+            # 2) Mapping explicite des secrets Vault vers les variables comprises par psql
+            #    ⚠️ Hypothèse: dans extraEnv, l'index 1 = USERNAME et l'index 2 = PASSWORD
+            - name: PGUSER
+              value: {{ (index .Values.liquibase.job.extraEnv 1).value | quote }}
+            - name: PGPASSWORD
+              value: {{ (index .Values.liquibase.job.extraEnv 2).value | quote }}
+
+            # 3) Paramètres de connexion (non secrets)
             - name: PGHOST
               value: "postgresql.ns-postgresql.svc.cluster.local"
             - name: PGPORT
@@ -43,6 +50,7 @@ spec:
             - name: PGDATABASE
               value: "ibmclouddb"
 
+            # 4) Injection Vault (scope liquibase) — évite le nil pointer
 {{- if .Values.liquibase.hashicorp }}
 {{ include "common-library.hashicorp.vaultenv" (dict
     "Values" .Values.liquibase
