@@ -1,2 +1,3 @@
-SELECT
-  has_database_privilege('role-dev', 'ibmclouddb', 'CREATE') AS role_dev_can_create;
+SELECT datname, pg_catalog.pg_get_userbyid(datdba)
+FROM pg_database
+WHERE datname = 'ibmclouddb';
