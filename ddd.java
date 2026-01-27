@@ -1,1 +1,14 @@
-kubectl exec -n <ns> <pod> -- sh -c "grep -R \"000_create_schema.yaml\" -n / 2>/dev/null | head -n 20"
+<dependency>
+  <groupId>com.bnpp.pf.pfspring</groupId>
+  <artifactId>pf-spring-starter-web</artifactId>
+  <exclusions>
+    <exclusion>
+      <groupId>com.bnpp.pf.pfspring</groupId>
+      <artifactId>pf-spring-starter-liquibase</artifactId>
+    </exclusion>
+    <exclusion>
+      <groupId>com.bnpp.pf.pfspring</groupId>
+      <artifactId>pf-spring-liquibase</artifactId>
+    </exclusion>
+  </exclusions>
+</dependency>
