@@ -1,3 +1,1 @@
-SELECT datname, pg_catalog.pg_get_userbyid(datdba)
-FROM pg_database
-WHERE datname = 'ibmclouddb';
+kubectl exec -n <ns> <pod> -- sh -c "find / -name '000_create_schema.yaml' 2>/dev/null | head"
