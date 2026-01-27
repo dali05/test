@@ -1,1 +1,1 @@
-kubectl exec -n <ns> <pod> -- sh -c "find / -name '000_create_schema.yaml' 2>/dev/null | head"
+kubectl exec -n <ns> <pod> -- sh -c "grep -R \"000_create_schema.yaml\" -n / 2>/dev/null | head -n 20"
