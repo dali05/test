@@ -1,14 +1,9 @@
-<dependency>
-  <groupId>com.bnpp.pf.pfspring</groupId>
-  <artifactId>pf-spring-starter-web</artifactId>
-  <exclusions>
-    <exclusion>
-      <groupId>com.bnpp.pf.pfspring</groupId>
-      <artifactId>pf-spring-starter-liquibase</artifactId>
-    </exclusion>
-    <exclusion>
-      <groupId>com.bnpp.pf.pfspring</groupId>
-      <artifactId>pf-spring-liquibase</artifactId>
-    </exclusion>
-  </exclusions>
-</dependency>
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
