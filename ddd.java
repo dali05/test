@@ -11,17 +11,6 @@ spec:
   template:
     spec:
       restartPolicy: Never
-
-      {{- /* ✅ vaultenv DOIT être ici, PAS dans metadata.annotations */}}
-      {{- if .Values.liquibase.hashicorp.enabled }}
-      {{- include "common-library.hashicorp.vaultenv" (dict
-            "Values" .Values.liquibase
-            "Release" .Release
-            "Chart" .Chart
-            "Capabilities" .Capabilities
-          ) | nindent 6 }}
-      {{- end }}
-
       containers:
         - name: db-bootstrap
           image: postgres:15
@@ -31,13 +20,7 @@ spec:
             - |
               set -e
               echo "=== Bootstrap schema start ==="
-
-              # Vault injecte ces variables
-              export PGUSER="${PF_LIQUIBASE_COMMAND_USERNAME}"
-              export PGPASSWORD="${PF_LIQUIBASE_COMMAND_PASSWORD}"
-
               echo "PGHOST=$PGHOST"
-              echo "PGPORT=$PGPORT"
               echo "PGDATABASE=$PGDATABASE"
               echo "PGUSER=$PGUSER"
 
@@ -47,15 +30,20 @@ spec:
               SQL
 
               echo "=== Bootstrap schema done ==="
-
           env:
-            # ♻️ Réutilisation EXACTE des env Liquibase (Vault inclus)
+            # 1) On garde tes env Liquibase (Vault inclus)
             {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
 
-            # Variables standard Postgres
+            # 2) Variables standard Postgres
             - name: PGHOST
               value: "postgresql.ns-postgresql.svc.cluster.local"
             - name: PGPORT
               value: "5432"
             - name: PGDATABASE
               value: "ibmclouddb"
+
+            # 3) ✅ Mapping des creds dynamiques Vault → variables utilisées par psql
+            - name: PGUSER
+              value: "$(PF_LIQUIBASE_COMMAND_USERNAME)"
+            - name: PGPASSWORD
+              value: "$(PF_LIQUIBASE_COMMAND_PASSWORD)"
