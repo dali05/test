@@ -15,31 +15,21 @@ spec:
         - name: db-bootstrap
           image: postgres:15
           imagePullPolicy: IfNotPresent
-
-          # ✅ OBLIGATOIRE : vaultenv comme entrypoint
-          command: ["vaultenv"]
+          command: ["sh", "-c"]
           args:
-            - "sh"
-            - "-c"
             - |
               set -e
               echo "=== Bootstrap schema start ==="
               echo "PGHOST=$PGHOST"
               echo "PGDATABASE=$PGDATABASE"
               echo "PGUSER=$PGUSER"
-
               psql -v ON_ERROR_STOP=1 <<SQL
               CREATE SCHEMA IF NOT EXISTS admin AUTHORIZATION CURRENT_USER;
               CREATE SCHEMA IF NOT EXISTS liquibase AUTHORIZATION CURRENT_USER;
               SQL
-
               echo "=== Bootstrap schema done ==="
-
           env:
-            # 🔁 EXACTEMENT les mêmes env que Liquibase
-            {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
-
-            # Variables Postgres standards
+            # vars postgres
             - name: PGHOST
               value: "postgresql.ns-postgresql.svc.cluster.local"
             - name: PGPORT
@@ -47,16 +37,18 @@ spec:
             - name: PGDATABASE
               value: "ibmclouddb"
 
-            # Mapping Liquibase → psql
+            # mapping liquibase -> psql (valeurs résolues par vaultenv)
             - name: PGUSER
               value: "$(PF_LIQUIBASE_COMMAND_USERNAME)"
             - name: PGPASSWORD
               value: "$(PF_LIQUIBASE_COMMAND_PASSWORD)"
 
-          # 🔑 Injection Vault (INDISPENSABLE)
-          {{- include "common-library.hashicorp.vaultenv" (dict
-              "Values" .Values.liquibase
-              "Release" .Release
-              "Chart" .Chart
-              "Capabilities" .Capabilities
-          ) | nindent 10 }}
+            # on garde aussi les env liquibase (vault refs)
+            {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
+
+      {{- include "common-library.hashicorp.vaultenv" (dict
+            "Values" .Values.liquibase
+            "Release" .Release
+            "Chart" .Chart
+            "Capabilities" .Capabilities
+          ) | nindent 6 }}
