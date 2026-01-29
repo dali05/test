@@ -18,7 +18,7 @@ spec:
           {{ .Data.password }}
           {{- end -}}`}}
     spec:
-      serviceAccountName: <sa-qui-authentifie-vault>
+      serviceAccountName: <SERVICE_ACCOUNT_AUTORISE_VAULT>
       restartPolicy: Never
       containers:
         - name: db-bootstrap
@@ -27,9 +27,9 @@ spec:
           args:
             - |
               set -e
-              # le fichier injecté contiendra 2 lignes: username puis password (selon template)
               USER="$(sed -n '1p' /vault/secrets/dbcreds)"
               PASS="$(sed -n '2p' /vault/secrets/dbcreds)"
+
               export PGUSER="$USER"
               export PGPASSWORD="$PASS"
               export PGHOST="postgresql.ns-postgresql.svc.cluster.local"
