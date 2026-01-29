@@ -15,8 +15,12 @@ spec:
         - name: db-bootstrap
           image: postgres:15
           imagePullPolicy: IfNotPresent
-          command: ["sh", "-c"]
+
+          # ✅ OBLIGATOIRE : vaultenv comme entrypoint
+          command: ["vaultenv"]
           args:
+            - "sh"
+            - "-c"
             - |
               set -e
               echo "=== Bootstrap schema start ==="
@@ -30,11 +34,12 @@ spec:
               SQL
 
               echo "=== Bootstrap schema done ==="
+
           env:
-            # 1) On garde tes env Liquibase (Vault inclus)
+            # 🔁 EXACTEMENT les mêmes env que Liquibase
             {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
 
-            # 2) Variables standard Postgres
+            # Variables Postgres standards
             - name: PGHOST
               value: "postgresql.ns-postgresql.svc.cluster.local"
             - name: PGPORT
@@ -42,8 +47,16 @@ spec:
             - name: PGDATABASE
               value: "ibmclouddb"
 
-            # 3) ✅ Mapping des creds dynamiques Vault → variables utilisées par psql
+            # Mapping Liquibase → psql
             - name: PGUSER
               value: "$(PF_LIQUIBASE_COMMAND_USERNAME)"
             - name: PGPASSWORD
               value: "$(PF_LIQUIBASE_COMMAND_PASSWORD)"
+
+          # 🔑 Injection Vault (INDISPENSABLE)
+          {{- include "common-library.hashicorp.vaultenv" (dict
+              "Values" .Values.liquibase
+              "Release" .Release
+              "Chart" .Chart
+              "Capabilities" .Capabilities
+          ) | nindent 10 }}
