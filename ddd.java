@@ -4,51 +4,36 @@ metadata:
   name: {{ .Release.Name }}-db-bootstrap
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
-  backoffLimit: 1
   template:
+    metadata:
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "postgres-role"
+        vault.hashicorp.com/agent-inject-secret-dbcreds: "database/creds/own_pg000000_ibmclouddb"
+        vault.hashicorp.com/agent-inject-template-dbcreds: |
+          {{`{{- with secret "database/creds/own_pg000000_ibmclouddb" -}}
+          {{ .Data.username }}
+          {{ .Data.password }}
+          {{- end -}}`}}
     spec:
+      serviceAccountName: <sa-qui-authentifie-vault>
       restartPolicy: Never
       containers:
         - name: db-bootstrap
           image: postgres:15
-          imagePullPolicy: IfNotPresent
-          command: ["sh", "-c"]
+          command: ["sh","-c"]
           args:
             - |
               set -e
-              echo "=== Bootstrap schema start ==="
-              echo "PGHOST=$PGHOST"
-              echo "PGDATABASE=$PGDATABASE"
-              echo "PGUSER=$PGUSER"
-              psql -v ON_ERROR_STOP=1 <<SQL
-              CREATE SCHEMA IF NOT EXISTS admin AUTHORIZATION CURRENT_USER;
-              CREATE SCHEMA IF NOT EXISTS liquibase AUTHORIZATION CURRENT_USER;
-              SQL
-              echo "=== Bootstrap schema done ==="
-          env:
-            # vars postgres
-            - name: PGHOST
-              value: "postgresql.ns-postgresql.svc.cluster.local"
-            - name: PGPORT
-              value: "5432"
-            - name: PGDATABASE
-              value: "ibmclouddb"
+              # le fichier injecté contiendra 2 lignes: username puis password (selon template)
+              USER="$(sed -n '1p' /vault/secrets/dbcreds)"
+              PASS="$(sed -n '2p' /vault/secrets/dbcreds)"
+              export PGUSER="$USER"
+              export PGPASSWORD="$PASS"
+              export PGHOST="postgresql.ns-postgresql.svc.cluster.local"
+              export PGPORT="5432"
+              export PGDATABASE="ibmclouddb"
 
-            # mapping liquibase -> psql (valeurs résolues par vaultenv)
-            - name: PGUSER
-              value: "$(PF_LIQUIBASE_COMMAND_USERNAME)"
-            - name: PGPASSWORD
-              value: "$(PF_LIQUIBASE_COMMAND_PASSWORD)"
-
-            # on garde aussi les env liquibase (vault refs)
-            {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
-
-      {{- include "common-library.hashicorp.vaultenv" (dict
-            "Values" .Values.liquibase
-            "Release" .Release
-            "Chart" .Chart
-            "Capabilities" .Capabilities
-          ) | nindent 6 }}
+              psql -c "CREATE SCHEMA IF NOT EXISTS admin; CREATE SCHEMA IF NOT EXISTS liquibase;"
