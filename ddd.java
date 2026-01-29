@@ -1,1 +1,7 @@
-kubectl -n ns-wall-e-springboot get pod wall-e-db-bootstrap-4qst7 -o jsonpath='{.spec.initContainers[*].name}'
+kubectl label namespace ns-wall-e-springboot vault.hashicorp.com/agent-inject=true
+
+kubectl label namespace ns-wall-e-springboot admission.vault.hashicorp.com/enabled=true
+
+
+
+kubectl label namespace ns-wall-e-springboot vault-injection=enabled
