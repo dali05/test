@@ -13,22 +13,29 @@ spec:
     metadata:
       annotations:
         vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/role: {{ .Values.vault.role | quote }}
-        vault.hashicorp.com/agent-inject-secret-dbcreds: {{ .Values.vault.dbCredsPath | quote }}
+
+        # ✅ role Kubernetes auth Vault (ton écran "role")
+        vault.hashicorp.com/role: "ns-wall-e-springboot-local-ap11236-java-application-liquibase"
+
+        # ✅ chemin autorisé par la policy (ton écran "policy")
+        vault.hashicorp.com/agent-inject-secret-dbcreds: "database/postgres/pg0000000/creds/app_pg0000000_ibmclouddb"
+
+        # On écrit username + password dans /vault/secrets/dbcreds (2 lignes)
         vault.hashicorp.com/agent-inject-template-dbcreds: |
-          {{`{{- with secret "`}}{{ .Values.vault.dbCredsPath }}{{`" -}}
+          {{`{{- with secret "database/postgres/pg0000000/creds/app_pg0000000_ibmclouddb" -}}
           {{ .Data.username }}
           {{ .Data.password }}
           {{- end -}}`}}
-        {{- if .Values.vault.namespace }}
-        vault.hashicorp.com/namespace: {{ .Values.vault.namespace | quote }}
-        {{- end }}
+
     spec:
-      serviceAccountName: dali
+      # ✅ doit matcher EXACTEMENT bound_service_account_names
+      serviceAccountName: local-ap11236-java-application-liquibase
       restartPolicy: Never
+
       containers:
         - name: db-bootstrap
           image: postgres:15
+          imagePullPolicy: IfNotPresent
           command: ["sh","-c"]
           args:
             - |
@@ -37,7 +44,8 @@ spec:
               CREDS_FILE="/vault/secrets/dbcreds"
               if [ ! -f "$CREDS_FILE" ]; then
                 echo "ERROR: Vault did not inject $CREDS_FILE"
-                echo "Check: injector enabled for namespace + role binding to serviceAccount 'dali'"
+                echo "Check: serviceAccountName + namespace + vault role name + secret path"
+                echo "serviceAccountName=$(cat /var/run/secrets/kubernetes.io/serviceaccount/namespace 2>/dev/null || true)"
                 ls -la /vault || true
                 exit 1
               fi
