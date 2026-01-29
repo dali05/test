@@ -19,25 +19,37 @@ spec:
           args:
             - |
               set -e
-              echo "=== Bootstrap schema start ==="
-              echo "PGHOST=$PGHOST"
-              echo "PGDATABASE=$PGDATABASE"
-              echo "PGUSER=$PGUSER"
 
+              # ✅ mapper les variables vault (PF_*) vers les variables psql (PG*)
+              export PGUSER="$PF_LIQUIBASE_COMMAND_USERNAME"
+              export PGPASSWORD="$PF_LIQUIBASE_COMMAND_PASSWORD"
+
+              echo "Connected as PGUSER=$PGUSER"
               psql -v ON_ERROR_STOP=1 <<SQL
               CREATE SCHEMA IF NOT EXISTS admin AUTHORIZATION CURRENT_USER;
               CREATE SCHEMA IF NOT EXISTS liquibase AUTHORIZATION CURRENT_USER;
               SQL
 
-              echo "=== Bootstrap schema done ==="
+              echo "Bootstrap OK"
           env:
-            # 🔁 Réutilisation EXACTE des env Liquibase (Vault inclus)
+            # ✅ récupérées dynamiquement via vaultenv (exactement comme ton job liquibase)
             {{- toYaml .Values.liquibase.job.extraEnv | nindent 12 }}
 
-            # Variables standard Postgres
+            # ✅ paramètres postgres
             - name: PGHOST
               value: "postgresql.ns-postgresql.svc.cluster.local"
             - name: PGPORT
               value: "5432"
             - name: PGDATABASE
               value: "ibmclouddb"
+
+      # ⚠️ IMPORTANT : il faut aussi activer vaultenv sur CE job
+      # (exactement comme tu le fais sur le job liquibase)
+      {{- if .Values.hashicorp.enabled }}
+      {{- include "common-library.hashicorp.vaultenv" (dict
+            "Values" .Values
+            "Release" .Release
+            "Chart" .Chart
+            "Capabilities" .Capabilities
+          ) | nindent 6 }}
+      {{- end }}
