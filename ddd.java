@@ -1,18 +1,15 @@
-liquibase:
-  hashicorp:
-    enabled: true
-    # On reste en vaultenv pour liquibase job normal, pas besoin de toucher
-    method: vaultenv
+{{- $ctx := dict "Values" .Values.liquibase "Chart" .Chart "Release" .Release "Capabilities" .Capabilities -}}
 
-    # MAIS il faut que "template" soit défini car vault-agent-initcontainer en a besoin
-    template: |
-      template {
-        contents = <<EOT
-      DB_USER={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.username }}{{ end }}
-      DB_PASSWORD={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.password }}{{ end }}
-      DB_HOST=postgresql.ns-postgresql.svc.cluster.local
-      DB_PORT=5432
-      DB_NAME=xxxx
-      EOT
-        destination = "/applis/vault/db.env"
-      }
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "common-library.fullname" . }}-vault-agent-config
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+  labels:
+{{ include "common-library.metadata.labels" $ctx | nindent 4 }}
+data:
+  vault-agent.hcl: |
+{{ .Values.liquibase.hashicorp.template | nindent 4 }}
