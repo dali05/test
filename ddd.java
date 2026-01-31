@@ -1,49 +1,40 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ include "common-library.fullname" . }}-vault-agent-config
-  annotations:
-    "helm.sh/hook": pre-install, pre-upgrade
-    "helm.sh/hook-weight": "-4"
-    "helm.sh/hook-delete-policy": before-hook-creation
-data:
-  vault-agent-config.hcl: |
-    exit_after_auth = true
-    pid_file = "/home/vault/pidfile"
+dbBootstrap:
+  enabled: true
+  image: postgres:15
 
-    auto_auth {
-      method "kubernetes" {
-        mount_path = "auth/kubernetes"
-        config = {
-          role = "ns-wall-e-springboot-local-ap11236-java-application-liquibase"
-        }
+  env:
+    PGHOST: "postgresql.ns-postgresql.svc.cluster.local"
+    PGPORT: "5432"
+    PGDATABASE: "ibmclouddb"
+
+  hashicorp:
+    enabled: true
+    method: vault-agent-initcontainer
+    ns: "root"
+    path: "kubernetes_kub00001_local"
+    approle: "ns-wall-e-springboot-local-ap11236-java-application-liquibase"
+    template: |
+      template {
+        destination = "/etc/secrets/pg.env"
+        perms       = "0600"
+        contents = <<EOH
+{{- with secret "database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb" -}}
+export PGUSER="{{ .Data.username }}"
+export PGPASSWORD="{{ .Data.password }}"
+{{- end -}}
+EOH
       }
-      sink "file" {
-        config = {
-          path = "/home/vault/.token"
-        }
-      }
-    }
-
-    template {
-      contents = <<EOT
-DB_USER={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.username }}{{ end }}
-DB_PASSWORD={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.password }}{{ end }}
-DB_HOST=postgresql.ns-postgresql.svc.cluster.local
-DB_PORT=5432
-DB_NAME=<TA_DB>
-EOT
-      destination = "/applis/vault/db.env"
-    }
 
 
+
+{{- if .Values.dbBootstrap.enabled }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ include "common-library.fullname" . }}-db-bootstrap
+  name: {{ .Release.Name }}-db-bootstrap
   annotations:
-    "helm.sh/hook": pre-install, pre-upgrade
-    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 1
@@ -51,59 +42,40 @@ spec:
     spec:
       restartPolicy: Never
 
-      # IMPORTANT: doit matcher le bound service account du role Vault
-      serviceAccountName: local-ap11236-java-application-liquibase
-
-      volumes:
-        - name: config
-          configMap:
-            name: {{ include "common-library.fullname" . }}-vault-agent-config
-            items:
-              - key: vault-agent-config.hcl
-                path: vault-agent-config.hcl
-        - name: vault-shared-data
-          emptyDir: {}
-        - name: vault-home
-          emptyDir: {}
-
+      {{- /* Vault agent initcontainer (vos conventions) */}}
+      {{- with .Values.dbBootstrap.hashicorp }}
       initContainers:
-        - name: vault-agent
-          image: bnpp-pf/vault:1.20.3-2
-          command: ["vault","agent","-config=/etc/vault/vault-agent-config.hcl","-log-level=info"]
-          env:
-            - name: VAULT_ADDR
-              value: "https://vault.ns-vault.svc.cluster.local:8200"
-            # DEV/local: ignore cert (sinon bad certificate)
-            - name: VAULT_SKIP_VERIFY
-              value: "true"
-          volumeMounts:
-            - name: config
-              mountPath: /etc/vault
-              readOnly: true
-            - name: vault-shared-data
-              mountPath: /applis/vault
-            - name: vault-home
-              mountPath: /home/vault
+        {{- include "common-library.hashicorp.initcontainer" (dict "Values" (dict "hashicorp" .) "Release" $.Release "Chart" $.Chart) | nindent 8 }}
+      {{- end }}
 
       containers:
-        - name: create-liquibase-schema
-          image: wall-e-sql   # ton image qui contient psql
+        - name: db-bootstrap
+          image: {{ .Values.dbBootstrap.image | quote }}
           command: ["sh","-c"]
           args:
             - |
-              set -euo pipefail
+              set -e
+              . /etc/secrets/pg.env
+              psql -v ON_ERROR_STOP=1 \
+                -h "$PGHOST" \
+                -p "$PGPORT" \
+                -d "$PGDATABASE" \
+                -c "CREATE SCHEMA IF NOT EXISTS liquibase; CREATE SCHEMA IF NOT EXISTS admin;"
 
-              echo "== db.env =="
-              ls -l /applis/vault || true
-              cat /applis/vault/db.env
-
-              . /applis/vault/db.env
-              export PGPASSWORD="$DB_PASSWORD"
-
-              echo "Creating schema liquibase..."
-              psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
-                -c 'CREATE SCHEMA IF NOT EXISTS liquibase;'
+          env:
+            - name: PGHOST
+              value: {{ .Values.dbBootstrap.env.PGHOST | quote }}
+            - name: PGPORT
+              value: {{ .Values.dbBootstrap.env.PGPORT | quote }}
+            - name: PGDATABASE
+              value: {{ .Values.dbBootstrap.env.PGDATABASE | quote }}
 
           volumeMounts:
             - name: vault-shared-data
-              mountPath: /applis/vault
+              mountPath: /etc/secrets
+
+      {{- with .Values.dbBootstrap.hashicorp }}
+      volumes:
+        {{- include "common-library.hashicorp.initcontainer.volumes" (dict "Values" (dict "hashicorp" .) "Release" $.Release "Chart" $.Chart) | nindent 8 }}
+      {{- end }}
+{{- end }}
