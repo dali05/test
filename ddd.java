@@ -1,3 +1,1 @@
-{{- if and (.Values.hashicorp.enabled) (eq .Values.hashicorp.method "vault-agent-initcontainer") }}
-{{ include "common-library.hashicorp.initcontainer.configmap" . }}
-{{- end }}
+helm template wall-e chart -f chart-env/local/values.yaml | grep -n "vault-agent-config"
