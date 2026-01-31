@@ -1,4 +1,40 @@
-{{- $ctx := dict "Values" .Values.liquibase "Chart" .Chart "Release" .Release "Capabilities" .Capabilities -}}
+liquibase:
+  hashicorp:
+    enabled: true
+    method: "vault-agent-initcontainer"
+    addr: "http://vault.ns-vault.svc.cluster.local:8200"
+    ns: ""
+
+    template: |
+      exit_after_auth = true
+      pid_file = "/home/vault/pidfile"
+
+      auto_auth {
+        method "kubernetes" {
+          mount_path = "auth/kubernetes"
+          config = {
+            role = "ns-wall-e-springboot-local-ap11236-java-application-liquibase"
+          }
+        }
+      }
+
+      sink "file" {
+        config = {
+          path = "/home/vault/.token"
+        }
+      }
+
+      template {
+        contents = <<EOT
+DB_USER={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.username }}{{ end }}
+DB_PASSWORD={{ with secret "database/postgres/pg000000/creds/app_pg000000_ibmclouddb" }}{{ .Data.password }}{{ end }}
+DB_HOST=postgresql.ns-postgresql.svc.cluster.local
+DB_PORT=5432
+DB_NAME=<TA_DB>
+EOT
+        destination = "/applis/vault/db.env"
+      }
+
 
 apiVersion: batch/v1
 kind: Job
@@ -13,9 +49,7 @@ spec:
   template:
     spec:
       restartPolicy: Never
-
-      # ⚠️ important: même SA que liquibase si Vault est bound à ce SA
-      serviceAccountName: {{ include "common-library.serviceAccountName" $ctx }}
+      serviceAccountName: {{ include "common-library.serviceAccountName" . }}
 
       containers:
         - name: create-liquibase-schema
@@ -26,21 +60,17 @@ spec:
             - |
               set -euo pipefail
 
-              # schema liquibase
-              SCHEMA="${LIQUIBASE_LIQUIBASE_SCHEMA_NAME:-liquibase}"
+              echo "Sourcing Vault DB env"
+              . /applis/vault/db.env
 
-              # JDBC -> postgres URL
-              JDBC_URL="${PF_LIQUIBASE_COMMAND_URL}"
-              PGURL="$(echo "$JDBC_URL" | sed -E 's|^jdbc:||')"
-
-              export PGPASSWORD="${PF_LIQUIBASE_COMMAND_PASSWORD}"
-
-              echo "Creating schema ${SCHEMA}..."
-              psql "${PGURL}" -U "${PF_LIQUIBASE_COMMAND_USERNAME}" -v ON_ERROR_STOP=1 \
-                -c "CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\";"
-
-          env:
-{{ include "common-library.hashicorp.vaultenv" $ctx | nindent 12 }}
-{{- with .Values.liquibase.job.extraEnv }}
-{{ toYaml . | nindent 12 }}
-{{- end }}
+              echo "Creating schema liquibase..."
+              psql \
+                -h "$DB_HOST" \
+                -p "$DB_PORT" \
+                -U "$DB_USER" \
+                -d "$DB_NAME" \
+                -v ON_ERROR_STOP=1 \
+                -c "CREATE SCHEMA IF NOT EXISTS liquibase;"
+          volumeMounts:
+            - name: vault-shared-data
+              mountPath: /applis/vault
