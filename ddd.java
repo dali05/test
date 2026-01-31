@@ -1,32 +1,46 @@
-args:
-  - |
-    set -euo pipefail
+{{- $ctx := dict "Values" .Values.liquibase "Chart" .Chart "Release" .Release "Capabilities" .Capabilities -}}
 
-    export PGSSLMODE=require
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common-library.fullname" . }}-db-bootstrap
+  annotations:
+    "helm.sh/hook": pre-install, pre-upgrade
+    "helm.sh/hook-weight": "-3"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
 
-    # Parse JDBC URL: jdbc:postgresql://HOST:PORT/DB
-    PGHOST="$(echo "$PF_LIQUIBASE_COMMAND_URL" | sed -E 's#^jdbc:postgresql://([^:/]+).*$#\1#')"
-    PGPORT="$(echo "$PF_LIQUIBASE_COMMAND_URL" | sed -E 's#^jdbc:postgresql://[^:/]+:([0-9]+)/.*$#\1#')"
-    PGDATABASE="$(echo "$PF_LIQUIBASE_COMMAND_URL" | sed -E 's#^.*/([^/?]+).*$#\1#')"
+      # ⚠️ important: même SA que liquibase si Vault est bound à ce SA
+      serviceAccountName: {{ include "common-library.serviceAccountName" $ctx }}
 
-    PGUSER="$PF_LIQUIBASE_COMMAND_USERNAME"
-    export PGPASSWORD="$PF_LIQUIBASE_COMMAND_PASSWORD"
+      containers:
+        - name: create-liquibase-schema
+          image: "{{ .Values.liquibase.job.image.fullName }}"
+          imagePullPolicy: {{ .Values.liquibase.job.image.pullPolicy | default "IfNotPresent" }}
+          command: ["sh","-c"]
+          args:
+            - |
+              set -euo pipefail
 
-    # Stop si le username n'est pas résolu (cas $username)
-    if echo "$PGUSER" | grep -q '\$username'; then
-      echo "ERROR: PF_LIQUIBASE_COMMAND_USERNAME is not resolved: $PGUSER"
-      echo "Fix Vault env injection (username/password) before running psql."
-      exit 1
-    fi
+              # schema liquibase
+              SCHEMA="${LIQUIBASE_LIQUIBASE_SCHEMA_NAME:-liquibase}"
 
-    echo "Waiting for Postgres ${PGHOST}:${PGPORT}/${PGDATABASE} (sslmode=$PGSSLMODE)..."
-    until psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "select 1" >/dev/null 2>&1; do
-      sleep 2
-    done
+              # JDBC -> postgres URL
+              JDBC_URL="${PF_LIQUIBASE_COMMAND_URL}"
+              PGURL="$(echo "$JDBC_URL" | sed -E 's|^jdbc:||')"
 
-    echo "Creating schemas..."
-    psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -v ON_ERROR_STOP=1 \
-      -c "CREATE SCHEMA IF NOT EXISTS admin;" \
-      -c "CREATE SCHEMA IF NOT EXISTS liquibase;"
+              export PGPASSWORD="${PF_LIQUIBASE_COMMAND_PASSWORD}"
 
-    echo "DB bootstrap done ✔"
+              echo "Creating schema ${SCHEMA}..."
+              psql "${PGURL}" -U "${PF_LIQUIBASE_COMMAND_USERNAME}" -v ON_ERROR_STOP=1 \
+                -c "CREATE SCHEMA IF NOT EXISTS \"${SCHEMA}\";"
+
+          env:
+{{ include "common-library.hashicorp.vaultenv" $ctx | nindent 12 }}
+{{- with .Values.liquibase.job.extraEnv }}
+{{ toYaml . | nindent 12 }}
+{{- end }}
