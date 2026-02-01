@@ -17,7 +17,7 @@ data:
       address = {{ .Values.dbBootstrap.hashicorp.vaultAddr | quote }}
     }
 
-    # --- un seul auto_auth ---
+    # 1 seul auto_auth
     auto_auth {
       method "kubernetes" {
         mount_path = "auth/{{ .Values.dbBootstrap.hashicorp.path }}"
@@ -33,7 +33,7 @@ data:
       }
     }
 
-    # --- requis si tu actives cache/api_proxy, et évite l'erreur "listener block missing" ---
+    # requis pour éviter "listener missing"
     cache {
       use_auto_auth_token = true
     }
@@ -47,7 +47,6 @@ data:
       exit_on_retry_failure = true
     }
 
-    {{- /* --- templates Vault Agent --- */ -}}
     {{- range $i, $tpl := .Values.dbBootstrap.hashicorp.template }}
     template {
       destination = {{ $tpl.destination | quote }}
