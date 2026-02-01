@@ -1,52 +1,65 @@
 {{- /*
 templates/00-vault-agent-configmap.yaml
-
-But:
-- créer le ConfigMap "wall-e-vault-agent-config" pour le Job dbBootstrap
-- en réutilisant le template de la common-library
+Crée le ConfigMap "wall-e-vault-agent-config" qui contient vault-agent-config.hcl
 */ -}}
-
-{{- if and (.Values.dbBootstrap.enabled)
-          (.Values.dbBootstrap.hashicorp.enabled)
-          (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") }}
-
-{{- $ctx := deepCopy . -}}
-{{- /* IMPORTANT: la common-library lit .Values.hashicorp, pas .Values.dbBootstrap.hashicorp */ -}}
-{{- $_ := set $ctx.Values "hashicorp" .Values.dbBootstrap.hashicorp -}}
-
-{{- /* (Optionnel) si tu ne veux pas monter un configmap "properties" dans vault-agent */ -}}
-{{- $_ := set $ctx.Values "configmap" (dict "enabled" false) -}}
-
-{{- /* Hook: créé avant le Job (le Job est à -10) */ -}}
-{{- /* Si ta common-library gère déjà les hooks, tu peux supprimer ces annotations.
-      Sinon, on force ici le hook. */ -}}
+{{- if and (.Values.dbBootstrap.enabled) (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "common-library.fullname" $ctx }}-vault-agent-config
+  name: wall-e-vault-agent-config
+  namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
     "helm.sh/hook-weight": "-20"
-    "helm.sh/hook-delete-policy": before-hook-creation
-  labels:
-{{ include "common-library.metadata.labels" $ctx | nindent 4 }}
 data:
   vault-agent-config.hcl: |
     exit_after_auth = true
     pid_file = "/home/vault/pidfile"
+
+    vault {
+      address = "{{ .Values.dbBootstrap.hashicorp.vaultAddr }}"
+      {{- if .Values.dbBootstrap.hashicorp.caCert }}
+      ca_cert = "{{ .Values.dbBootstrap.hashicorp.caCert }}"
+      {{- end }}
+    }
+
     auto_auth {
       method "kubernetes" {
-        mount_path = "auth/{{ printf "%v" $ctx.Values.hashicorp.path }}"
+        mount_path = "auth/{{ .Values.dbBootstrap.hashicorp.authPath }}"
         config = {
-          role = "{{ default (printf "%s-%s" $ctx.Release.Namespace (include "common-library.serviceAccountName" $ctx)) $ctx.Values.hashicorp.approle }}"
+          role = "{{ .Values.dbBootstrap.hashicorp.role }}"
         }
       }
+
       sink "file" {
         config = {
           path = "/home/vault/.vault-token"
         }
       }
     }
-{{ $ctx.Values.hashicorp.template | indent 4 }}
 
-{{- end }}
+    cache {
+      use_auto_auth_token = true
+    }
+
+    template_config {
+      exit_on_retry_failure = true
+    }
+
+    template {
+      destination = "{{ .Values.dbBootstrap.hashicorp.destination }}"
+      perms       = "0600"
+      contents = <<EOH
+{{`{{- with secret "`}}{{ .Values.dbBootstrap.hashicorp.secretPath }}{{`" -}}`}}
+export PGUSER="{{`{{ .Data.username }}`}}"
+export PGPASSWORD="{{`{{ .Data.password }}`}}"
+{{`{{- end -}}`}}
+EOH
+    }
+{{- end -}}
+
+secretPath: "database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb"
+
+    # Fichier généré dans le shared volume
+    destination: "/etc/secrets/pg.env"
