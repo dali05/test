@@ -1,46 +1,3 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: vault-pg-debug-vault-agent-config
-  namespace: ns-wall-e-springboot
-data:
-  vault-agent-config.hcl: |
-    exit_after_auth = false
-    pid_file = "/home/vault/pidfile"
-
-    vault {
-      address = "http://vault.ns-vault.svc.cluster.local:8200"
-    }
-
-    auto_auth {
-      method "kubernetes" {
-        # ✅ LE BON MOUNT PATH
-        mount_path = "auth/kubernetes_kub00001_local"
-
-        config = {
-          # ✅ Ton rôle Vault (tu l'appelles "approle" dans values, mais ici c'est bien role=...)
-          role = "ns-wall-e-springboot-local-ap11236-java-application-liquibase"
-        }
-      }
-
-      sink "file" {
-        config = {
-          path = "/home/vault/.vault-token"
-        }
-      }
-    }
-
-    template {
-      destination = "/etc/secrets/pg.env"
-      perms       = "0600"
-      contents    = <<EOH
-{{- with secret "database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb" -}}
-export PGUSER="{{ .Data.username }}"
-export PGPASSWORD="{{ .Data.password }}"
-{{- end -}}
-EOH
-    }
----
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -48,83 +5,72 @@ metadata:
   namespace: ns-wall-e-springboot
 spec:
   backoffLimit: 0
+  ttlSecondsAfterFinished: 300
   template:
+    metadata:
+      labels:
+        app: vault-pg-debug
     spec:
       restartPolicy: Never
 
-      # ⚠️ Mets ici ton ServiceAccount (celui qui est bound au rôle Vault)
-      serviceAccountName: local-ap11236-java-application-liquibase
+      # IMPORTANT:
+      # Mets ici le MÊME ServiceAccount que ton job liquibase utilisait
+      # (celui qui marche avec ton role Vault "ns-wall-e-springboot-local-ap11236-java-application-liquibase")
+      serviceAccountName: default
 
       volumes:
         - name: vault-shared-data
           emptyDir: {}
-        - name: vault-config
+        - name: config
           configMap:
-            name: vault-pg-debug-vault-agent-config
-        - name: vault-home
-          emptyDir: {}
+            name: wall-e-vault-agent-config
+            optional: false
 
       initContainers:
         - name: vault-agent
           image: docker-registry-devops.pf.echonet/hashicorp/vault:1.21
+          imagePullPolicy: IfNotPresent
           args:
             - "agent"
             - "-config=/etc/vault/vault-agent-config.hcl"
             - "-log-level=info"
           env:
-            # Si tu utilises Vault Enterprise namespace (sinon tu peux enlever VAULT_NAMESPACE)
-            - name: VAULT_NAMESPACE
-              value: "ns-wall-e-springboot"
             - name: VAULT_ADDR
               value: "http://vault.ns-vault.svc.cluster.local:8200"
+            - name: VAULT_NAMESPACE
+              value: "ns-wall-e-springboot"
+            - name: VAULT_CACERT
+              value: "/etc/ssl/certs/ca.crt"
+            - name: SKIP_CHOWN
+              value: "true"
+            - name: SKIP_SETCAP
+              value: "true"
           volumeMounts:
-            - name: vault-config
-              mountPath: /etc/vault
-              readOnly: true
             - name: vault-shared-data
               mountPath: /etc/secrets
-            - name: vault-home
-              mountPath: /home/vault
+            - name: config
+              mountPath: /etc/vault
+              readOnly: true
 
       containers:
-        - name: show-pg-creds
+        - name: show-pg-env
           image: busybox:1.36
+          imagePullPolicy: IfNotPresent
           command: ["/bin/sh","-lc"]
           args:
             - |
-              echo "==== waiting for /etc/secrets/pg.env (rendered by vault-agent) ===="
-              for i in $(seq 1 120); do
-                if [ -f /etc/secrets/pg.env ]; then
-                  break
-                fi
-                sleep 1
-              done
-
-              if [ ! -f /etc/secrets/pg.env ]; then
-                echo "ERROR: /etc/secrets/pg.env not created"
-                exit 1
-              fi
-
-              echo "==== /etc/secrets/pg.env content ===="
-              cat /etc/secrets/pg.env
-              echo "==== extracted values ===="
-
-              # source le fichier (il contient export PGUSER=... etc)
-              . /etc/secrets/pg.env
-
+              echo "===== DEBUG: listing /etc/secrets ====="
+              ls -la /etc/secrets || true
+              echo "===== DEBUG: content of /etc/secrets/pg.env ====="
+              cat /etc/secrets/pg.env || true
+              echo "===== DEBUG: extracted values ====="
+              # source le fichier si c’est un envfile
+              . /etc/secrets/pg.env 2>/dev/null || true
               echo "PGUSER=$PGUSER"
               echo "PGPASSWORD=$PGPASSWORD"
-
-              echo "==== END ===="
-              # laisse le pod vivant pour que tu puisses le voir / exec si besoin
-              sleep 3600
+              echo "===== END ====="
+              # petit sleep pour te laisser le temps de voir le pod si besoin
+              sleep 20
           volumeMounts:
             - name: vault-shared-data
               mountPath: /etc/secrets
-
-
-
-kubectl apply -f vault-pg-debug.yaml
-kubectl logs -n ns-wall-e-springboot job/vault-pg-debug -c show-pg-creds
-kubectl logs -n ns-wall-e-springboot job/vault-pg-debug -c vault-agent
-
