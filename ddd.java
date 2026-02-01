@@ -1,59 +1,76 @@
-{{- if and (.Values.dbBootstrap.enabled) (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") }}
-apiVersion: v1
-kind: ConfigMap
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: {{ .Release.Name }}-vault-agent-config
-  namespace: {{ .Release.Namespace }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation
-    "helm.sh/hook-weight": "-20"
-data:
-  vault-agent-config.hcl: |
-    exit_after_auth = true
-    pid_file        = "/home/vault/pidfile"
+  name: vault-pg-debug
+  namespace: ns-wall-e-springboot
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 300
+  template:
+    metadata:
+      labels:
+        app: vault-pg-debug
+    spec:
+      restartPolicy: Never
 
-    vault {
-      address = {{ .Values.dbBootstrap.hashicorp.vaultAddr | quote }}
-    }
+      # IMPORTANT:
+      # Mets ici le MÊME ServiceAccount que ton job liquibase utilisait
+      # (celui qui marche avec ton role Vault "ns-wall-e-springboot-local-ap11236-java-application-liquibase")
+      serviceAccountName: default
 
-    # 1 seul auto_auth
-    auto_auth {
-      method "kubernetes" {
-        mount_path = "auth/{{ .Values.dbBootstrap.hashicorp.path }}"
-        config = {
-          role = {{ .Values.dbBootstrap.hashicorp.approle | quote }}
-        }
-      }
+      volumes:
+        - name: vault-shared-data
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: wall-e-vault-agent-config
+            optional: false
 
-      sink "file" {
-        config = {
-          path = "/home/vault/.vault-token"
-        }
-      }
-    }
+      initContainers:
+        - name: vault-agent
+          image: docker-registry-devops.pf.echonet/hashicorp/vault:1.21
+          imagePullPolicy: IfNotPresent
+          args:
+            - "agent"
+            - "-config=/etc/vault/vault-agent-config.hcl"
+            - "-log-level=info"
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault.ns-vault.svc.cluster.local:8200"
+            - name: VAULT_NAMESPACE
+              value: "ns-wall-e-springboot"
+            - name: VAULT_CACERT
+              value: "/etc/ssl/certs/ca.crt"
+            - name: SKIP_CHOWN
+              value: "true"
+            - name: SKIP_SETCAP
+              value: "true"
+          volumeMounts:
+            - name: vault-shared-data
+              mountPath: /etc/secrets
+            - name: config
+              mountPath: /etc/vault
+              readOnly: true
 
-    # requis pour éviter "listener missing"
-    cache {
-      use_auto_auth_token = true
-    }
-
-    listener "tcp" {
-      address     = "127.0.0.1:8200"
-      tls_disable = true
-    }
-
-    template_config {
-      exit_on_retry_failure = true
-    }
-
-    {{- range $i, $tpl := .Values.dbBootstrap.hashicorp.template }}
-    template {
-      destination = {{ $tpl.destination | quote }}
-      perms       = {{ default "0600" $tpl.perms | quote }}
-      contents    = <<EOH
-{{ $tpl.contents | nindent 0 }}
-EOH
-    }
-    {{- end }}
-{{- end }}
+      containers:
+        - name: show-pg-env
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh","-lc"]
+          args:
+            - |
+              echo "===== DEBUG: listing /etc/secrets ====="
+              ls -la /etc/secrets || true
+              echo "===== DEBUG: content of /etc/secrets/pg.env ====="
+              cat /etc/secrets/pg.env || true
+              echo "===== DEBUG: extracted values ====="
+              # source le fichier si c’est un envfile
+              . /etc/secrets/pg.env 2>/dev/null || true
+              echo "PGUSER=$PGUSER"
+              echo "PGPASSWORD=$PGPASSWORD"
+              echo "===== END ====="
+              # petit sleep pour te laisser le temps de voir le pod si besoin
+              sleep 20
+          volumeMounts:
+            - name: vault-shared-data
+              mountPath: /etc/secrets
