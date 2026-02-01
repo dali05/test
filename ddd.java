@@ -121,3 +121,10 @@ spec:
           volumeMounts:
             - name: vault-shared-data
               mountPath: /etc/secrets
+
+
+
+kubectl apply -f vault-pg-debug.yaml
+kubectl logs -n ns-wall-e-springboot job/vault-pg-debug -c show-pg-creds
+kubectl logs -n ns-wall-e-springboot job/vault-pg-debug -c vault-agent
+
