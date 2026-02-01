@@ -1,28 +1,31 @@
-{{- if and (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") -}}
+{{- if and (.Values.dbBootstrap.enabled) (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ .Release.Name }}-vault-agent-config
   namespace: {{ .Release.Namespace }}
-  labels:
-    app.kubernetes.io/name: {{ .Chart.Name }}
-    app.kubernetes.io/instance: {{ .Release.Name }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+    "helm.sh/hook-weight": "-20"
 data:
-  vault-agent-config.hcl: |-
+  vault-agent-config.hcl: |
     exit_after_auth = true
     pid_file        = "/home/vault/pidfile"
 
     vault {
-      address = "{{ required "dbBootstrap.hashicorp.vaultAddr is required" .Values.dbBootstrap.hashicorp.vaultAddr }}"
+      address = {{ .Values.dbBootstrap.hashicorp.vaultAddr | quote }}
     }
 
+    # --- un seul auto_auth ---
     auto_auth {
       method "kubernetes" {
-        mount_path = "{{ required "dbBootstrap.hashicorp.path is required" .Values.dbBootstrap.hashicorp.path }}"
+        mount_path = "auth/{{ .Values.dbBootstrap.hashicorp.path }}"
         config = {
-          role = "{{ required "dbBootstrap.hashicorp.approle is required" .Values.dbBootstrap.hashicorp.approle }}"
+          role = {{ .Values.dbBootstrap.hashicorp.approle | quote }}
         }
       }
+
       sink "file" {
         config = {
           path = "/home/vault/.vault-token"
@@ -30,6 +33,7 @@ data:
       }
     }
 
+    # --- requis si tu actives cache/api_proxy, et évite l'erreur "listener block missing" ---
     cache {
       use_auto_auth_token = true
     }
@@ -43,13 +47,13 @@ data:
       exit_on_retry_failure = true
     }
 
-    {{- $templates := .Values.dbBootstrap.hashicorp.template | default (list) -}}
-    {{- range $i, $tpl := $templates }}
+    {{- /* --- templates Vault Agent --- */ -}}
+    {{- range $i, $tpl := .Values.dbBootstrap.hashicorp.template }}
     template {
-      destination = "{{ required (printf "dbBootstrap.hashicorp.template[%d].destination is required" $i) $tpl.destination }}"
-      perms       = "{{ $tpl.perms | default "0600" }}"
-      contents = <<EOH
-{{- required (printf "dbBootstrap.hashicorp.template[%d].contents is required" $i) $tpl.contents | nindent 4 }}
+      destination = {{ $tpl.destination | quote }}
+      perms       = {{ default "0600" $tpl.perms | quote }}
+      contents    = <<EOH
+{{ $tpl.contents | nindent 0 }}
 EOH
     }
     {{- end }}
