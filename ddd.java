@@ -1,1 +1,2 @@
-kubectl -n ns-wall-e-springboot get job wall-e-db-bootstrap -o yaml | grep -n "serviceAccountName"
+grep -RIn "serviceAccountName" chart/ | head -n 50
+grep -RIn "wall-e-sa" chart/ | head -n 50
