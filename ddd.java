@@ -1,1 +1,3 @@
-kubectl exec -n ns-vault vault-0 -- sh -c 'echo $VAULT_TOKEN'
+kubectl exec -n ns-vault -it vault-0 -- sh
+vault login <TON_TOKEN_ADMIN>
+vault auth list
