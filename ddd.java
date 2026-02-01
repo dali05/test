@@ -1,8 +1,3 @@
-{{- /*
-templates/00-vault-agent-configmap.yaml
-Crée la ConfigMap qui contient /etc/vault/vault-agent-config.hcl
-*/ -}}
-
 {{- if and (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") -}}
 apiVersion: v1
 kind: ConfigMap
@@ -21,7 +16,6 @@ data:
       address = "{{ required "dbBootstrap.hashicorp.vaultAddr is required" .Values.dbBootstrap.hashicorp.vaultAddr }}"
     }
 
-    # Un seul auto_auth (sinon Vault Agent plante)
     auto_auth {
       method "kubernetes" {
         mount_path = "{{ required "dbBootstrap.hashicorp.path is required" .Values.dbBootstrap.hashicorp.path }}"
@@ -36,12 +30,10 @@ data:
       }
     }
 
-    # Recommandé : réutiliser le token auto_auth
     cache {
       use_auto_auth_token = true
     }
 
-    # Nécessaire si tu actives des features qui exigent un listener (api_proxy, etc.)
     listener "tcp" {
       address     = "127.0.0.1:8200"
       tls_disable = true
@@ -57,7 +49,7 @@ data:
       destination = "{{ required (printf "dbBootstrap.hashicorp.template[%d].destination is required" $i) $tpl.destination }}"
       perms       = "{{ $tpl.perms | default "0600" }}"
       contents = <<EOH
-{{- required (printf "dbBootstrap.hashicorp.template[%d].contents is required" $i) $tpl.contents | nindent 0 }}
+{{- required (printf "dbBootstrap.hashicorp.template[%d].contents is required" $i) $tpl.contents | nindent 4 }}
 EOH
     }
     {{- end }}
