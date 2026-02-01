@@ -1,1 +1,1 @@
-kubectl logs -n ns-wall-e-springboot vault-pg-debug-8mn6t -c vault-agent --previous
+kubectl exec -n ns-vault vault-0 -- vault read auth/kubernetes_kube001_local/role/ns-wall-e-springboot-local-ap11236-java-application-liquibase
