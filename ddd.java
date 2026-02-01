@@ -1,4 +1,1 @@
-hashicorp:
-  image:
-    repository: docker-registry-devops.pf.echonet/hashicorp/vault
-    tag: "1.15.2"
+kubectl -n ns-wall-e-springboot get cm wall-e-vault-agent-config -o yaml
