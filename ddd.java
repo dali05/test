@@ -1,1 +1,1 @@
-kubectl exec -n ns-vault vault-0 -- vault read auth/kubernetes_kube001_local/role/ns-wall-e-springboot-local-ap11236-java-application-liquibase
+kubectl exec -n ns-vault vault-0 -- sh -c 'echo $VAULT_TOKEN'
