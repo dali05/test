@@ -1,34 +1,40 @@
 {{- /*
 templates/00-vault-agent-configmap.yaml
-Crée le ConfigMap "wall-e-vault-agent-config" qui contient vault-agent-config.hcl
+ConfigMap consommé par le initContainer vault-agent.
+Nom attendu dans tes describe pod: wall-e-vault-agent-config
 */ -}}
-{{- if and (.Values.dbBootstrap.enabled) (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") -}}
+{{- if and (.Values.dbBootstrap.hashicorp.enabled) (eq .Values.dbBootstrap.hashicorp.method "vault-agent-initcontainer") -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: wall-e-vault-agent-config
+  name: {{ .Release.Name }}-vault-agent-config
   namespace: {{ .Release.Namespace }}
   annotations:
     "helm.sh/hook": pre-install,pre-upgrade
-    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-delete-policy": before-hook-creation
     "helm.sh/hook-weight": "-20"
 data:
   vault-agent-config.hcl: |
     exit_after_auth = true
-    pid_file = "/home/vault/pidfile"
+    pid_file        = "/home/vault/pidfile"
 
     vault {
-      address = "{{ .Values.dbBootstrap.hashicorp.vaultAddr }}"
+      address = {{ default "http://vault.ns-vault.svc.cluster.local:8200" .Values.dbBootstrap.hashicorp.vaultAddr | quote }}
       {{- if .Values.dbBootstrap.hashicorp.caCert }}
-      ca_cert = "{{ .Values.dbBootstrap.hashicorp.caCert }}"
+      ca_cert = {{ .Values.dbBootstrap.hashicorp.caCert | quote }}
+      {{- end }}
+      {{- if .Values.dbBootstrap.hashicorp.vaultNamespace }}
+      namespace = {{ .Values.dbBootstrap.hashicorp.vaultNamespace | quote }}
       {{- end }}
     }
 
+    # ✅ Un seul auto_auth (sinon: at most one "auto_auth" block is allowed)
     auto_auth {
       method "kubernetes" {
-        mount_path = "auth/{{ .Values.dbBootstrap.hashicorp.authPath }}"
+        # ex: auth/kubernetes_kub00001_local
+        mount_path = {{ printf "auth/%s" (required "dbBootstrap.hashicorp.path est requis" .Values.dbBootstrap.hashicorp.path) | quote }}
         config = {
-          role = "{{ .Values.dbBootstrap.hashicorp.role }}"
+          role = {{ required "dbBootstrap.hashicorp.approle est requis" .Values.dbBootstrap.hashicorp.approle | quote }}
         }
       }
 
@@ -39,27 +45,23 @@ data:
       }
     }
 
+    # ✅ requis (sinon: no auto_auth, cache, listener block found…)
     cache {
       use_auto_auth_token = true
+    }
+
+    # ✅ requis si ton agent active des features qui exigent un listener (api_proxy, etc.)
+    listener "tcp" {
+      address     = "127.0.0.1:8200"
+      tls_disable = true
     }
 
     template_config {
       exit_on_retry_failure = true
     }
 
-    template {
-      destination = "{{ .Values.dbBootstrap.hashicorp.destination }}"
-      perms       = "0600"
-      contents = <<EOH
-{{`{{- with secret "`}}{{ .Values.dbBootstrap.hashicorp.secretPath }}{{`" -}}`}}
-export PGUSER="{{`{{ .Data.username }}`}}"
-export PGPASSWORD="{{`{{ .Data.password }}`}}"
-{{`{{- end -}}`}}
-EOH
-    }
-{{- end -}}
-
-secretPath: "database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb"
-
-    # Fichier généré dans le shared volume
-    destination: "/etc/secrets/pg.env"
+    # Les templates Vault Agent (ce que tu as dans values.yaml -> dbBootstrap.hashicorp.template)
+{{- if .Values.dbBootstrap.hashicorp.template }}
+{{ .Values.dbBootstrap.hashicorp.template | nindent 4 }}
+{{- end }}
+{{- end }}
