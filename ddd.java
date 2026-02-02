@@ -1,1 +1,1 @@
-kubectl -n ns-wall-e-springboot get pod wall-e-db-bootstrap-v4d66 -o jsonpath='{.spec.serviceAccountName}{"\n"}'
+kubectl -n ns-wall-e-springboot exec -it <pod-name> -c db-bootstrap -- ls -l /etc/secrets
