@@ -1,1 +1,1 @@
-kubectl -n ns-wall-e-springboot get cm wall-e-vault-agent-config -o yaml | grep -n "Values.hashicorp.path"
+kubectl -n ns-wall-e-springboot get pod wall-e-db-bootstrap-v4d66 -o jsonpath='{.spec.serviceAccountName}{"\n"}'
