@@ -1,10 +1,1 @@
-template {
-  destination = "/etc/secrets/pg.env"
-  perms       = "0600"
-  contents = <<EOH
-{{`{{- with secret "database/postgres/pg0000000/creds/own_pg0000000_ibmclouddb" -}}`}}
-export PGUSER="{{`{{ .Data.username }}`}}"
-export PGPASSWORD="{{`{{ .Data.password }}`}}"
-{{`{{- end -}}`}}
-EOH
-}
+helm get manifest wall-e -n ns-wall-e-springboot | grep -n "wall-e-vault-agent-config" -n
