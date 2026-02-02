@@ -1,1 +1,1 @@
-helm get manifest wall-e -n ns-wall-e-springboot | grep -n "wall-e-vault-agent-config" -n
+helm get manifest wall-e -n ns-wall-e-springboot | nl -ba | sed -n '90,140p'
