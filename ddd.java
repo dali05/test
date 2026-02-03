@@ -1,3 +1,25 @@
+
+args:
+  - |
+    set -euo pipefail
+
+    set -a
+    . /etc/secrets/pg.env
+    set +a
+
+    {{- $schemas := join "; CREATE SCHEMA IF NOT EXISTS " .Values.bootstrap.schemas }}
+
+    psql \
+      -h "{{ .Values.bootstrap.db.host }}" \
+      -p "{{ .Values.bootstrap.db.port }}" \
+      -U "$PGUSER" \
+      -d "{{ .Values.bootstrap.db.name }}" \
+      -v ON_ERROR_STOP=1 \
+      -c "CREATE SCHEMA IF NOT EXISTS {{ $schemas }};"
+
+    echo "DONE."
+
+
 bootstrap:
   enabled: true
   jobNameSuffix: db-bootstrap
