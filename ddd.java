@@ -1,3 +1,6 @@
+
+serviceAccountName: {{ include "common-library.fullname" . }}-{{ .Values.bootstrap.selectors.component }}
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
