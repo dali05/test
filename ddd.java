@@ -1,34 +1,24 @@
-apiVersion: batch/v1
-kind: Job
+apiVersion: v1
+kind: Pod
 metadata:
-  name: postgres-test-job
+  name: postgres-test-pod
   namespace: ns002i012773
   annotations:
     com.illumio.app: postgres-test
     com.illumio.env: dev
     com.illumio.app-tier: database
     com.illumio.middleware: postgres
-    com.illumio.role: job
+    com.illumio.role: test
 spec:
-  backoffLimit: 0
-  template:
-    metadata:
-      annotations:
-        com.illumio.app: postgres-test
-        com.illumio.env: dev
-        com.illumio.app-tier: database
-        com.illumio.middleware: postgres
-        com.illumio.role: job
-    spec:
-      restartPolicy: Never
+  restartPolicy: Never
+  securityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: postgres
+      image: postgres:15
       securityContext:
-        seccompProfile:
-          type: RuntimeDefault
-      containers:
-        - name: postgres
-          image: postgres:15
-          securityContext:
-            allowPrivilegeEscalation: false
-          env:
-            - name: POSTGRES_PASSWORD
-              value: example
+        allowPrivilegeEscalation: false
+      env:
+        - name: POSTGRES_PASSWORD
+          value: example
