@@ -1,41 +1,45 @@
 package com.bnpp.pf.common.api.config.doc;
 
-import org.springdoc.core.customizers.OpenApiCustomizer;
-import org.springdoc.core.customizers.OperationCustomizer;
 import org.springdoc.core.models.GroupedOpenApi;
-import org.springframework.context.support.GenericApplicationContext;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.beans.factory.support.BeanDefinitionRegistryPostProcessor;
+import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.context.EnvironmentAware;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
-import org.springframework.beans.factory.SmartInitializingSingleton;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Component
-public class DynamicOpenApiGroupsRegistrar implements SmartInitializingSingleton {
+public class DynamicOpenApiGroupsRegistrar implements BeanDefinitionRegistryPostProcessor, EnvironmentAware {
 
-  private final SpringdocProperties props;
-  private final GenericApplicationContext context;
-  private final OpenApiCustomizer globalHeadersAndErrors;
-  private final OperationCustomizer dynamicTags;
+  private Environment environment;
 
-  public DynamicOpenApiGroupsRegistrar(SpringdocProperties props,
-                                       GenericApplicationContext context,
-                                       OpenApiCustomizer globalHeadersAndErrors,
-                                       OperationCustomizer dynamicTags) {
-    this.props = props;
-    this.context = context;
-    this.globalHeadersAndErrors = globalHeadersAndErrors;
-    this.dynamicTags = dynamicTags;
+  @Override
+  public void setEnvironment(Environment environment) {
+    this.environment = environment;
   }
 
   @Override
-  public void afterSingletonsInstantiated() {
-    if (props.getGroups() == null || !props.getGroups().isEnabled()) {
-      return;
-    }
+  public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
+    // ✅ lire les props TÔT via Binder (pas via SpringdocProperties bean)
+    SpringdocProperties.Groups groups = Binder.get(environment)
+        .bind("springdoc.groups", SpringdocProperties.Groups.class)
+        .orElseGet(SpringdocProperties.Groups::new);
 
-    for (SpringdocProperties.Group g : props.getGroups().getItems()) {
+    if (!groups.isEnabled() || groups.getItems() == null) return;
+
+    for (SpringdocProperties.Group g : groups.getItems()) {
       if (g.getName() == null || g.getName().isBlank()) continue;
       if ("public".equalsIgnoreCase(g.getName())) continue;
 
-      context.registerBean("groupedOpenApi_" + g.getName(), GroupedOpenApi.class, () -> {
+      String beanName = "groupedOpenApi_" + g.getName();
+
+      RootBeanDefinition def = new RootBeanDefinition(GroupedOpenApi.class);
+      def.setInstanceSupplier(() -> {
         GroupedOpenApi.Builder b = GroupedOpenApi.builder().group(g.getName());
 
         if (g.getPackagesToScan() != null && !g.getPackagesToScan().isEmpty()) {
@@ -45,11 +49,16 @@ public class DynamicOpenApiGroupsRegistrar implements SmartInitializingSingleton
           b.pathsToMatch(g.getPathsToMatch().toArray(new String[0]));
         }
 
-        b.addOpenApiCustomizer(globalHeadersAndErrors);
-        b.addOperationCustomizer(dynamicTags);
-
         return b.build();
       });
+
+      registry.registerBeanDefinition(beanName, def);
     }
+  }
+
+  @Override
+  public void postProcessBeanFactory(org.springframework.beans.factory.config.ConfigurableListableBeanFactory beanFactory)
+      throws BeansException {
+    // rien
   }
 }
